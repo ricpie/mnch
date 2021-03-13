@@ -18,11 +18,11 @@ knitr::opts_chunk$set(fig.path='../figures/', warning=FALSE, message=FALSE, cach
 #Import GPS, PA, ODK data
 
 ```{r load_merge}
-source('~/Dropbox/Jacaranda Kenya/Data Analysis/r_scripts/load.R')
-source('~/Dropbox/Jacaranda Kenya/Data Analysis/r_scripts/plot_deployments.R')
-source('~/Dropbox/Jacaranda Kenya/Data Analysis/r_scripts/import_odk.R')
-source('~/Dropbox/Jacaranda Kenya/Data Analysis/r_scripts/import_gps.R')
-source('~/Dropbox/Jacaranda Kenya/Data Analysis/r_scripts/import_purpleair.R')
+source('r_scripts/load.R')
+source('r_scripts/plot_deployments.R')
+source('r_scripts/import_odk.R')
+source('r_scripts/import_gps.R')
+source('r_scripts/import_purpleair.R')
 
 # set_key( "AIzaSyDUskJNHA7xGx6eTDg_dJdIvvlTPyIXdls", api = "geocode")
 # set_key( "AIzaSyDUskJNHA7xGx6eTDg_dJdIvvlTPyIXdls", api = "map")

@@ -7,9 +7,9 @@ library(tidyverse)
 library(ggrepel)
 library(tidyfast)
 # devtools::install_github("dkahle/ggmap")
-source('~/Dropbox/Jacaranda Kenya/Data Analysis/r_scripts/load.R')
-source('~/Dropbox/Jacaranda Kenya/Data Analysis/r_scripts/plot_deployments.R')
-source('~/Dropbox/Jacaranda Kenya/Data Analysis/r_scripts/import_odk.R')
+source('r_scripts/load.R')
+source('r_scripts/plot_deployments.R')
+source('r_scripts/import_odk.R')
 # install.packages('MazamaSpatialUtils')
 # devtools::install_github('MazamaScience/MazamaCoreUtils')
 # devtools::install_github('MazamaScience/PWFSLSmoke', build_vignettes=FALSE)
@@ -18,7 +18,7 @@ graphics.off()
 
 path_inventory = "~/Dropbox/Jacaranda Kenya Field Folder/Data"
 
-path_test = "~/Dropbox/Jacaranda Kenya/Data Analysis/PurpleAir Tests"
+path_test = "PurpleAir Tests"
 path_study = "~/Dropbox/Jacaranda Kenya Field Folder/Data"
 
 path_temp = path_study #Change as needed.
@@ -134,7 +134,7 @@ pa_data[,local_time := with_tz(UTCDateTime,tzone = "Africa/Nairobi")]
 ######Calculate concentrations
 pa_data$pm25_larpa_ave = 0.778 * pa_data$pm2_5_cf_1_ave + 2.65
 
-saveRDS(pa_data,"~/Dropbox/Jacaranda Kenya/Data Analysis/processed data/pa_data.rds")
+saveRDS(pa_data,"processed data/pa_data.rds")
 
 return(pa_data)
 

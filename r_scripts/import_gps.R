@@ -3,7 +3,7 @@
 # source('r_scripts/load.R')
 # source('r_scripts/import_odk.R')
 path_inventory = "~/Dropbox/Jacaranda Kenya Field Folder/Data"
-path_test_gps = "~/Dropbox/Jacaranda Kenya/Data Analysis/GPS Tests"
+path_test_gps = "GPS Tests"
 path_study_gps = "~/Dropbox/Jacaranda Kenya Field Folder/Data/GPS"
 path_temp_gps = path_study_gps
 
@@ -79,6 +79,6 @@ gps_data[,local_time := with_tz(UTCDateTime,tzone = "Africa/Nairobi")]
 
 
 
-saveRDS(gps_data,"~/Dropbox/Jacaranda Kenya/Data Analysis/processed data/gps_data.RDS")
+saveRDS(gps_data,"processed data/gps_data.RDS")
 
 gps_data
