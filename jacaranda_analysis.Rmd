@@ -11,6 +11,13 @@ output:
 ---
 
 ```{r global_options, include=FALSE}
+dir.create("tester",showWarnings = F)
+dir.create("odk data",showWarnings = F)  #Put odk data downloads into here.
+dir.create("plots",showWarnings = F)
+dir.create("processed data",showWarnings = F)
+dir.create("QA Reports",showWarnings = F)
+dir.create("results",showWarnings = F)
+
 knitr::opts_chunk$set(fig.path='../figures/', warning=FALSE, message=FALSE, cache=FALSE)
 ```
 
