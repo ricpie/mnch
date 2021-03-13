@@ -37,3 +37,16 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+# Ignore folders
+data/
+results/
+figures/
+GPS\ Tests/
+odk\ data/
+plots/
+processed\ data/
+QA\ Reports/
+PurpleAir\ Tests/
+
+
