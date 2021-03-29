@@ -23,7 +23,7 @@ knitr::opts_chunk$set(fig.path='../figures/', warning=FALSE, message=FALSE, cach
 ```
 
 
-#Import GPS, PA, ODK data
+# Import GPS, PA, ODK data
 
 ```{r load_merge}
 source('r_scripts/load.R')
