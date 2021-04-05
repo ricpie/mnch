@@ -1,6 +1,8 @@
 ---
 title: "jacaranda"
 author: "berkeley_air_monitoring_group"
+knit: (function(inputFile, encoding) { rmarkdown::render(inputFile, encoding = encoding, output_file = paste0(substr(inputFile,1,nchar(inputFile)-4),Sys.Date(),'.html')) })
+
 date: "Sep. 2 2020"
 output:
   html_document:
@@ -47,6 +49,7 @@ as.data.frame(pa_data) %>%
   dplyr::group_by(filename) %>%
   dplyr::do(f=plot_files(.))
 
+
 as.data.frame(gps_data) %>%
   dplyr::group_by(filename) %>%
   dplyr::do(f=plot_gps_files(.))
@@ -57,7 +60,9 @@ all_merged <- all_merged %>%
                 gps_file = basename(filename.y),
                 sampletype = ifelse(tolower(pa_file) %like% 'amb','ambient','personal')) %>% 
   dplyr::rename(pa_id = instrument_id.x,
-                gps_id = instrument_id.y) 
+                gps_id = instrument_id.y) %>% 
+  dplyr::filter(!hhid %like% "AMBIENT") %>%
+  dplyr::filter(!is.na(UTCDateTime),!is.infinite(UTCDateTime))
 
 ```
 
@@ -185,7 +190,9 @@ all_merged %>%
 
 ```{r other plots}
 
-#Different plot for each household # pa_data_temp <- pa_data
+#Different plot for each household # 
+# pa_data_temp <- all_merged %>% dplyr::filter(!hhid %like% "AMBIENT") 
+
 plot_by_filedeployment <- function(pa_data_temp,pa_ambient) {
   
   p1 = pa_data_temp %>% 
@@ -196,26 +203,39 @@ plot_by_filedeployment <- function(pa_data_temp,pa_ambient) {
   p2 = pa_ambient %>% 
     dplyr::filter(local_time.x > min(pa_data_temp$local_time.x,na.rm = T),
                   local_time.x < max(pa_data_temp$local_time.x,na.rm = T)) %>%
-  ggplot() +
-  geom_point(aes(x=local_time.x, y=pm25_larpa_ave, color= sitename)) 
-
-plot_name = paste0("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/HHs with Amb/hhid_amb_",all_merged$hhid[1],".pnt")
-egg::ggarrange(p1, p2, heights = c(0.5,0.5))
-png(plot_name,width = 1000, height = 800, units = "px")
-dev.off()
+    ggplot() +
+    geom_point(aes(x=local_time.x, y=pm25_larpa_ave)) 
+  
+  plot_name = paste0("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/HHs with Amb/hhid_amb_",all_merged$hhid[1],".pnt")
+  egg::ggarrange(p1, p2, heights = c(0.5,0.5))
+  png(plot_name,width = 1000, height = 800, units = "px")
+  dev.off()
 }
 
 #Plot each hhid
 pa_ambient = all_merged %>% dplyr::filter(hhid %like% "AMBIENT")
 
-as.data.frame(pa_data) %>%
+all_merged %>% 
+  dplyr::filter(!hhid %like% "AMBIENT") %>% 
   dplyr::group_by(hhid) %>%
-  dplyr::do(plot_by_filedeployment(.,pa_ambient))
+  dplyr::do(f = plot_by_filedeployment(.,pa_ambient))
+
 
 ```
 
 
 
 ```{r save_data}
+
+list_of_datasets <- list(
+  "PurpleAir and GPS"=summary_pa_deployment,
+  "Surveys" = odkstartend)
+
+filename = paste0("QA Reports/QA_PA_GPS_ODK_",Sys.Date(),".xlsx")
+
+write.xlsx(list_of_datasets,file = filename)
+
+source('r_scripts/emailfun.R')
+emailfun(email,filename)
 
 ```
