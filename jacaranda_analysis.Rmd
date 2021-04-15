@@ -22,12 +22,13 @@ dir.create("results",showWarnings = F)
 dir.create("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/HHs with Amb",showWarnings = F)
 dir.create("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/maps",showWarnings = F)
 knitr::opts_chunk$set(fig.path='../figures/', warning=FALSE, message=FALSE, cache=FALSE)
+email = 1
 ```
 
 
 # Import GPS, PA, ODK data
 
-```{r load_merge}
+```{r load_merge,cache=TRUE}
 source('r_scripts/load.R')
 source('r_scripts/plot_deployments.R')
 source('r_scripts/import_odk.R')
@@ -54,8 +55,9 @@ as.data.frame(gps_data) %>%
   dplyr::group_by(filename) %>%
   dplyr::do(f=plot_gps_files(.))
 
-all_merged = merge(pa_data,gps_data,by=c('UTCDateTime','hhid'),all.x = TRUE,all.y = TRUE)#,'sampletype'))
-all_merged <- all_merged %>% 
+all_merged = merge(pa_data,
+                   gps_data,
+                   by=c('UTCDateTime','hhid'),all.x = TRUE,all.y = TRUE) %>% 
   dplyr::mutate(pa_file = basename(filename.x),
                 gps_file = basename(filename.y),
                 sampletype = ifelse(tolower(pa_file) %like% 'amb','ambient','personal')) %>% 
@@ -74,7 +76,8 @@ all_merged <- all_merged %>%
 
 summary_pa_deployment <- all_merged %>% 
   dplyr::group_by(sampletype, hhid) %>%
-  dplyr::summarise(N = n(), Min = min(pm25_larpa_ave,na.rm = TRUE), Median = median(pm25_larpa_ave,na.rm = TRUE),
+  dplyr::summarise(N_gps_hours = sum(!is.na(lat))/60, N_pa_hours = sum(!is.na(pm25_larpa_ave))/30,
+                   Min = min(pm25_larpa_ave,na.rm = TRUE), Median = median(pm25_larpa_ave,na.rm = TRUE),
                    Mean = mean(pm25_larpa_ave,na.rm = TRUE), SD = sd(pm25_larpa_ave,na.rm = TRUE),
                    Max = max(pm25_larpa_ave,na.rm = TRUE),
                    Median_lat = median(lat,na.rm = TRUE), Median_lon = median(lon,na.rm = TRUE)) %>% 
@@ -103,6 +106,7 @@ openxlsx::write.xlsx(list_of_datasets, file = paste0("../results/Summary Statist
 
 # Plots
 * Plot boxplots and scatter plots for exposures, HAP, ratios therein.
+* Save html maps.
 
 ```{r boxplots_usage, fig.width=7, fig.height=4}
 
@@ -163,20 +167,22 @@ saveWidget(gg_ave, '~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/maps/ave_m
 
 map_by_filedeployment <- function(all_merged,pal) {
   
-  gg <- leaflet() %>%
-    addTiles() %>%  # use the default base map which is OpenStreetMap tiles
-    addProviderTiles(providers$Esri.WorldImagery) %>% #Test this baby out.
-    addCircles(lng=all_merged$lon,
-               lat=all_merged$lat,
-               popup=paste(all_merged$local_time.x,', ',
-                           all_merged$hhid,', ',all_merged$sampletype,', ', all_merged$pm25_larpa_ave),
-               fillColor = pal(all_merged$pm25_larpa_ave),
-               # radius =  (all_merged$pm25_larpa_ave+10)/10,
-               color = pal(all_merged$pm25_larpa_ave)
-    )
-  
   plot_name = paste0("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/maps/map_",all_merged$hhid[1],".html")
-  saveWidget(gg, plot_name, selfcontained = T)
+  if(!file.exists(plot_name)){
+    
+    gg <- leaflet() %>%
+      addTiles() %>%  # use the default base map which is OpenStreetMap tiles
+      addProviderTiles(providers$Esri.WorldImagery) %>% #Test this baby out.
+      addCircles(lng=all_merged$lon,
+                 lat=all_merged$lat,
+                 popup=paste(all_merged$local_time.x,', ',
+                             all_merged$hhid,', ',all_merged$sampletype,', ', all_merged$pm25_larpa_ave),
+                 fillColor = pal(all_merged$pm25_larpa_ave),
+                 # radius =  (all_merged$pm25_larpa_ave+10)/10,
+                 color = pal(all_merged$pm25_larpa_ave)
+      )
+    saveWidget(gg, plot_name, selfcontained = T)
+  }
 }
 
 #Map for each deployment
@@ -188,29 +194,39 @@ all_merged %>%
 ```
 
 
-```{r other plots}
+```{r other_plots}
 
 #Different plot for each household # 
 # pa_data_temp <- all_merged %>% dplyr::filter(!hhid %like% "AMBIENT") 
 
 plot_by_filedeployment <- function(pa_data_temp,pa_ambient) {
-  
-  p1 = pa_data_temp %>% 
-    ggplot() +
-    geom_point(aes(x=local_time, y=pm25_larpa_ave)) +
-    labs(title = paste0("PA for household: ",pa_data_temp$hhid[1]))
-  
-  p2 = pa_ambient %>% 
-    dplyr::filter(local_time.x > min(pa_data_temp$local_time.x,na.rm = T),
-                  local_time.x < max(pa_data_temp$local_time.x,na.rm = T)) %>%
-    ggplot() +
-    geom_point(aes(x=local_time.x, y=pm25_larpa_ave)) 
-  
-  plot_name = paste0("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/HHs with Amb/hhid_amb_",all_merged$hhid[1],".pnt")
-  egg::ggarrange(p1, p2, heights = c(0.5,0.5))
-  png(plot_name,width = 1000, height = 800, units = "px")
-  dev.off()
+  tryCatch({
+    plot_name = paste0("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/HHs with Amb/hhid_amb_",all_merged$hhid[1],".pnt")
+    
+    if(!file.exists(plot_name)){
+      
+      p1 = pa_data_temp %>% 
+        ggplot() +
+        geom_point(aes(x=local_time.x, y=pm25_larpa_ave)) +
+        labs(title = paste0("PA for household: ",pa_data_temp$hhid[1]))
+      
+      p2 = pa_ambient %>% 
+        dplyr::filter(local_time.x > min(pa_data_temp$local_time.x,na.rm = T),
+                      local_time.x < max(pa_data_temp$local_time.x,na.rm = T)) %>%
+        ggplot() +
+        geom_point(aes(x=local_time.x, y=pm25_larpa_ave)) 
+      
+      
+      egg::ggarrange(p1, p2, heights = c(0.5,0.5))
+      png(plot_name,width = 1000, height = 800, units = "px")
+      dev.off()
+    }
+  }, error = function(error_condition) {
+    print(paste0('Errore in HHID ',all_merged$hhid[1]))
+  }
+  , finally={})
 }
+
 
 #Plot each hhid
 pa_ambient = all_merged %>% dplyr::filter(hhid %like% "AMBIENT")

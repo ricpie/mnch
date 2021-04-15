@@ -60,6 +60,7 @@ all_pa_paths <- list.files(
   grep("PurpleAir", x = ., ignore.case = TRUE, value = TRUE) %>%
   grep("plots", x = ., ignore.case = TRUE, value = TRUE,invert = TRUE) %>%
   grep("GPS", x = ., ignore.case = TRUE, value = TRUE, invert = TRUE) %>%
+  grep("old ", x = ., ignore.case = TRUE, value = TRUE, invert = TRUE) %>%
   print()
 
 

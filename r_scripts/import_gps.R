@@ -18,6 +18,7 @@ gps_paths <- list.files(
 ) %>%
   grep("csv", x = ., ignore.case = TRUE, value = TRUE) %>%
   grep("xls", x = ., ignore.case = TRUE, value = TRUE, invert = TRUE) %>%
+  grep("old ", x = ., ignore.case = TRUE, value = TRUE, invert = TRUE) %>%
   print()
 
 #Import GPS data, format the time stamp, get rid of cruft
@@ -32,7 +33,8 @@ import_gps_fun <-function(x){
                   col_names = TRUE,
                   col_types = cols(.default = col_character())
   ) %>%
-    dplyr::mutate(filename = x) %>%
+    dplyr::mutate(filename = x,
+                  filesize_kb = file.size(x)/1000) %>%
     dplyr::mutate(basename = file_path_sans_ext(basename(filename))) %>%
     tidyr::separate(basename,c("hhid","instrument_id","datestart"),sep="_", extra = "merge")# %>% 
     # dplyr::mutate(sampletype = str_extract(hhid, "[[:alpha:]]+")) %>%
@@ -74,7 +76,7 @@ gps_data = gps_data[,list(lat = mean(lat, na.rm = T),
                           lon = mean(lon, na.rm = T),
                           HEIGHT = mean(HEIGHT, na.rm = T),
                           SPEED = mean(SPEED, na.rm = T)),
-                    by=list(UTCDateTime, filename,instrument_id,datestart,hhid)] #sampletype
+                    by=list(UTCDateTime, filename,instrument_id,datestart,hhid,filesize_kb)] #sampletype
 gps_data[,local_time := with_tz(UTCDateTime,tzone = "Africa/Nairobi")]
 
 
