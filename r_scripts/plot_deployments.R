@@ -287,3 +287,31 @@ f <- function(x) {
   r
 }
 
+
+plot_by_filedeployment <- function(pa_data_temp,pa_ambient) {
+  tryCatch({
+    plot_name = paste0("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/HHs with Amb/hhid_amb_",all_merged$hhid[1],".png")
+    
+    if(!file.exists(plot_name)){
+      
+      p1 = pa_data_temp %>% 
+        ggplot() +
+        geom_point(aes(x=local_time.x, y=pm25_larpa_ave)) +
+        labs(title = paste0("PA for household: ",pa_data_temp$hhid[1]))
+      
+      p2 = pa_ambient %>% 
+        dplyr::filter(local_time.x > min(pa_data_temp$local_time.x,na.rm = T),
+                      local_time.x < max(pa_data_temp$local_time.x,na.rm = T)) %>%
+        ggplot() +
+        geom_point(aes(x=local_time.x, y=pm25_larpa_ave)) 
+      
+      
+      egg::ggarrange(p1, p2, heights = c(0.5,0.5))
+      png(plot_name,width = 1000, height = 800, units = "px")
+      dev.off()
+    }
+  }, error = function(error_condition) {
+    print(paste0('Errore in HHID ',all_merged$hhid[1]))
+  }
+  , finally={})
+}

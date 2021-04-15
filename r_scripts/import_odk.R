@@ -1,5 +1,3 @@
-
-
 #R. Piedrahita 07-01-2020
 #Code to ingest ODK data 
 library(data.table)
