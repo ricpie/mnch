@@ -124,7 +124,7 @@ g_boxplot
 summary_wide <- tidyr::pivot_wider(summary_pa_deployment,
                                    id_cols = c('hhid','sampletype'),
                                    names_from = sampletype ,
-                                   values_from = c('Mean','N'))
+                                   values_from = c('Mean','N_gps_hours'))
 
 # # g_mother_child <- summary_wide %>% ggplot(aes(x=Mean_m, y = Mean_c)) +
 # #   geom_point(alpha = 0.25) +  
@@ -201,7 +201,7 @@ all_merged %>%
 
 plot_by_filedeployment <- function(pa_data_temp,pa_ambient) {
   tryCatch({
-    plot_name = paste0("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/HHs with Amb/hhid_amb_",all_merged$hhid[1],".pnt")
+    plot_name = paste0("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/HHs with Amb/hhid_amb_",all_merged$hhid[1],".png")
     
     if(!file.exists(plot_name)){
       
