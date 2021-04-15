@@ -13,6 +13,9 @@ output:
 ---
 
 ```{r global_options, include=FALSE}
+source('r_scripts/load.R')
+source('r_scripts/plot_deployments.R')
+
 dir.create("tester",showWarnings = F)
 dir.create("odk data",showWarnings = F)  #Put odk data downloads into here.
 dir.create("plots",showWarnings = F)
@@ -29,8 +32,6 @@ email = 1
 # Import GPS, PA, ODK data
 
 ```{r load_merge,cache=TRUE}
-source('r_scripts/load.R')
-source('r_scripts/plot_deployments.R')
 source('r_scripts/import_odk.R')
 source('r_scripts/import_gps.R')
 source('r_scripts/import_purpleair.R')

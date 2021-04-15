@@ -311,7 +311,7 @@ plot_by_filedeployment <- function(pa_data_temp,pa_ambient) {
       dev.off()
     }
   }, error = function(error_condition) {
-    print(paste0('Errore in HHID ',all_merged$hhid[1]))
+    print(paste0('Errore in HHID ',pa_data_temp$hhid[1]))
   }
   , finally={})
 }
