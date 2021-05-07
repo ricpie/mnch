@@ -26,6 +26,8 @@ dir.create("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/HHs with Amb",show
 dir.create("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/maps",showWarnings = F)
 knitr::opts_chunk$set(fig.path='../figures/', warning=FALSE, message=FALSE, cache=FALSE)
 email = 1
+timezone = 'GMT'
+local_tz = 'Africa/Nairobi'
 ```
 
 
@@ -51,7 +53,6 @@ as.data.frame(pa_data) %>%
   dplyr::group_by(filename) %>%
   dplyr::do(f=plot_files(.))
 
-
 as.data.frame(gps_data) %>%
   dplyr::group_by(filename) %>%
   dplyr::do(f=plot_gps_files(.))
@@ -66,6 +67,7 @@ all_merged = merge(pa_data,
                 gps_id = instrument_id.y) %>% 
   dplyr::filter(!hhid %like% "AMBIENT") %>%
   dplyr::filter(!is.na(UTCDateTime),!is.infinite(UTCDateTime))
+
 
 ```
 
@@ -105,6 +107,17 @@ openxlsx::write.xlsx(list_of_datasets, file = paste0("../results/Summary Statist
 ```
 
 
+
+# Geo-spatial analysis
+* What fraction of exposure happens at home?
+* Get list of home GPSs, calculate fraction of exposure near there.
+
+```{r geo-spatial-analysis, fig.width=7, fig.height=4}
+
+
+```
+
+
 # Plots
 * Plot boxplots and scatter plots for exposures, HAP, ratios therein.
 * Save html maps.
@@ -133,7 +146,7 @@ summary_wide <- tidyr::pivot_wider(summary_pa_deployment,
 # #   labs(y="Mean mother vs. child exposure",x="") + 
 # #   theme(legend.title = element_blank())
 # # g_mother_child
-# 
+
 
 ###Spatial Results
 
@@ -195,7 +208,7 @@ all_merged %>%
 ```
 
 
-```{r other_plots}
+```{r ambient_plots}
 
 #Different plot for each household # 
 # pa_data_temp <- all_merged %>% dplyr::filter(!hhid %like% "AMBIENT") 
@@ -217,7 +230,7 @@ all_merged %>%
 
 list_of_datasets <- list(
   "PurpleAir and GPS"=summary_pa_deployment,
-  "Surveys" = odkstartend
+  "ODK_start_end" = odkstartend
   )
 
 filename = paste0("QA Reports/QA_PA_GPS_ODK_",Sys.Date(),".xlsx")

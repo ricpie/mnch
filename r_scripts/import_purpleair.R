@@ -35,7 +35,7 @@ all_pa_inventories <- list.files(
   grep("xlsx", x = ., ignore.case = TRUE, value = TRUE) %>%
   tibble(
     path = .) %>% 
-  mutate(
+  dplyr::mutate(
     data = map(
       path,readxl::read_xlsx,
       skip = 1,
@@ -44,8 +44,8 @@ all_pa_inventories <- list.files(
       col_names = c("location", "id", "sitename","mac_address", "latitude", "longitude", "instrument_id","device_type")
     )
   ) %>%
-  dplyr::select(-path) %>%
   unnest(cols = c(data)) %>% 
+  dplyr::select(location,mac_address,instrument_id,device_type) %>%
   as.data.table()
 
 ##### Import PA data
@@ -60,8 +60,7 @@ all_pa_paths <- list.files(
   grep("PurpleAir", x = ., ignore.case = TRUE, value = TRUE) %>%
   grep("plots", x = ., ignore.case = TRUE, value = TRUE,invert = TRUE) %>%
   grep("GPS", x = ., ignore.case = TRUE, value = TRUE, invert = TRUE) %>%
-  grep("old ", x = ., ignore.case = TRUE, value = TRUE, invert = TRUE) %>%
-  print()
+  grep("old ", x = ., ignore.case = TRUE, value = TRUE, invert = TRUE) 
 
 
 import_pa <-function(x){
@@ -134,6 +133,8 @@ pa_data[,local_time := with_tz(UTCDateTime,tzone = "Africa/Nairobi")]
 
 ######Calculate concentrations
 pa_data$pm25_larpa_ave = 0.778 * pa_data$pm2_5_cf_1_ave + 2.65
+
+pa_data[,c("firmware_ver","pm10_0_cf_1","pm2_5_cf_1","pm10_0_cf_1_b","pm2_5_cf_1_b") := NULL]
 
 saveRDS(pa_data,"processed data/pa_data.rds")
 
