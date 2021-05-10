@@ -78,6 +78,7 @@ gps_data = gps_data[,list(lat = mean(lat, na.rm = T),
                           SPEED = mean(SPEED, na.rm = T)),
                     by=list(UTCDateTime, filename,instrument_id,datestart,hhid,filesize_kb)] #sampletype
 gps_data[,local_time := with_tz(UTCDateTime,tzone = "Africa/Nairobi")]
+gps_data[,UTCDateTime := NULL]
 
 
 

@@ -126,7 +126,7 @@ pa_data = pa_data[,list(current_temp_f = mean(current_temp_f, na.rm = T),
                         pm10_0_cf_1_b = mean(pm10_0_cf_1_b, na.rm = T),
                         pm2_5_cf_1_b = mean(pm2_5_cf_1_b, na.rm = T),
                         flag_maxedout = mean(flag_maxedout,na.rm = T)), #Calculate sd of acceleration by minute for compliance calcs.
-                  by=list(UTCDateTime, filename, mac_address, firmware_ver, id, sitename, latitude,longitude,instrument_id,hhid)] #sampletype
+                  by=list(UTCDateTime, filename, mac_address, firmware_ver,instrument_id,hhid)] #sampletype
 
 pa_data[,local_time := with_tz(UTCDateTime,tzone = "Africa/Nairobi")]
 
@@ -134,7 +134,7 @@ pa_data[,local_time := with_tz(UTCDateTime,tzone = "Africa/Nairobi")]
 ######Calculate concentrations
 pa_data$pm25_larpa_ave = 0.778 * pa_data$pm2_5_cf_1_ave + 2.65
 
-pa_data[,c("firmware_ver","pm10_0_cf_1","pm2_5_cf_1","pm10_0_cf_1_b","pm2_5_cf_1_b") := NULL]
+pa_data[,c("firmware_ver","pm10_0_cf_1","pm2_5_cf_1","pm10_0_cf_1_b","pm2_5_cf_1_b","pm2_5_cf_1_ave","UTCDateTime") := NULL]
 
 saveRDS(pa_data,"processed data/pa_data.rds")
 

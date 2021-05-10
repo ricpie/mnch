@@ -3,6 +3,11 @@ pacman::p_load(lubridate,plyr,dplyr,reshape2,devtools,shiny,shinydashboard,dygra
 ,gmailr,mailR,cronR,miniUI,shinyFiles,ggplot2,stringr,chron,doParallel,foreach,openxlsx,gridExtra,egg,cowplot,corrgram,
 factoextra,scales,htmlwidgets,tidyfast,ggmap,leaflet,plotly,tidyverse)
 
+getmode <- function(v) {
+  v <- v[!is.na(v)]
+  uniqv <- unique(v)
+  uniqv[which.max(tabulate(match(v, uniqv)))]
+}
 
 registerDoParallel(cores=detectCores()-2)
 

@@ -49,5 +49,6 @@ processed\ data/
 QA\ Reports/
 PurpleAir\ Tests/
 emailfun.R
-
+.html
+*.html
 

@@ -13,6 +13,12 @@ output:
 ---
 
 ```{r global_options, include=FALSE}
+email = 1
+timezone = 'GMT'
+local_tz = 'Africa/Nairobi'
+home_threshold_meters = 10 #meters
+
+
 source('r_scripts/load.R')
 source('r_scripts/plot_deployments.R')
 
@@ -25,9 +31,7 @@ dir.create("results",showWarnings = F)
 dir.create("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/HHs with Amb",showWarnings = F)
 dir.create("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/maps",showWarnings = F)
 knitr::opts_chunk$set(fig.path='../figures/', warning=FALSE, message=FALSE, cache=FALSE)
-email = 1
-timezone = 'GMT'
-local_tz = 'Africa/Nairobi'
+
 ```
 
 
@@ -48,7 +52,7 @@ source('r_scripts/import_purpleair.R')
 #Merge PA data with ODK data
 # pa_data = merge(pa_data,meta_merged, by.x=c("hhid"), by.y = c("hhid"))
 
-
+#Plot each deployment's raw data
 as.data.frame(pa_data) %>%
   dplyr::group_by(filename) %>%
   dplyr::do(f=plot_files(.))
@@ -57,33 +61,70 @@ as.data.frame(gps_data) %>%
   dplyr::group_by(filename) %>%
   dplyr::do(f=plot_gps_files(.))
 
+
+R = 6371e3 #meters - radius of earth
+phi_fun = function(lat) {lat*pi/180}
+phi_delta = function(lat1,lat2) {(lat1-lat2)*pi/180}
+lambda_delta_fun = function(lon1,lon2) {(lon2-lon1)*pi/180}
+x_fun = function(lambda_delta,phi){lambda_delta*cos(phi)}
+
+
+#Merge data and clean it up
 all_merged = merge(pa_data,
                    gps_data,
-                   by=c('UTCDateTime','hhid'),all.x = TRUE,all.y = TRUE) %>% 
+                   by=c('local_time','hhid'),all.x = TRUE,all.y = FALSE) %>% 
   dplyr::mutate(pa_file = basename(filename.x),
                 gps_file = basename(filename.y),
-                sampletype = ifelse(tolower(pa_file) %like% 'amb','ambient','personal')) %>% 
+                sampletype = ifelse(tolower(pa_file) %like% 'amb','ambient','personal'),
+                gps_filled = ifelse(is.na(lat),1,0)) %>% 
   dplyr::rename(pa_id = instrument_id.x,
                 gps_id = instrument_id.y) %>% 
   dplyr::filter(!hhid %like% "AMBIENT") %>%
-  dplyr::filter(!is.na(UTCDateTime),!is.infinite(UTCDateTime))
-
+  dplyr::filter(!filename.x %like% "Pilot") %>%
+  dplyr::filter(!is.na(local_time),!is.infinite(local_time)) %>% 
+  # Fill in time series down for GPS - seems appropriate for most cases based on time series plot of gps data.
+  dplyr::group_by(sampletype, hhid) %>%
+  fill(lat, .direction = "down") %>% 
+  fill(lon, .direction = "down") %>% 
+  dplyr::mutate(Mode_lat = getmode(lat),
+                Mode_lon = getmode(lon),
+                phi = phi_fun(lat),
+                lambda_delta = lambda_delta_fun(lon,Mode_lon),
+                x = x_fun(lambda_delta,phi),
+                y = phi_delta(lat,Mode_lat),
+                d_meters = R * sqrt(x^2 + y^2),
+                home_flag = ifelse(d_meters < home_threshold_meters,1,0)) %>% 
+  dplyr::ungroup() 
 
 ```
 
 
 
 # Summarize data
+* Calculate distance metric from home (mode)
+* What fraction of exposure happens at home?
+* Get list of home GPSs, calculate fraction of exposure near there.
 
 ```{r summarize_data}
 
 summary_pa_deployment <- all_merged %>% 
   dplyr::group_by(sampletype, hhid) %>%
-  dplyr::summarise(N_gps_hours = sum(!is.na(lat))/60, N_pa_hours = sum(!is.na(pm25_larpa_ave))/30,
-                   Min = min(pm25_larpa_ave,na.rm = TRUE), Median = median(pm25_larpa_ave,na.rm = TRUE),
-                   Mean = mean(pm25_larpa_ave,na.rm = TRUE), SD = sd(pm25_larpa_ave,na.rm = TRUE),
-                   Max = max(pm25_larpa_ave,na.rm = TRUE),
-                   Median_lat = median(lat,na.rm = TRUE), Median_lon = median(lon,na.rm = TRUE)) %>% 
+  dplyr::summarise(N_gps_samples = sum(!is.na(lat)), 
+                   N_pa_samples = sum(!is.na(pm25_larpa_ave)),
+                   N_hours = difftime(max(local_time,na.rm = T),
+                                      min(local_time,na.rm = T),units = "hours"),
+                   Min_pm25 = min(pm25_larpa_ave,na.rm = TRUE), 
+                   Median_pm25 = median(pm25_larpa_ave,na.rm = TRUE),
+                   Mean_pm25 = mean(pm25_larpa_ave,na.rm = TRUE), 
+                   Max_pm25 = max(pm25_larpa_ave,na.rm = TRUE),
+                   SD_pm25 = sd(pm25_larpa_ave,na.rm = TRUE),
+                   Mode_lat = getmode(lat), 
+                   Mode_lon = getmode(lon),
+                   n_home = sum(home_flag == 1,na.rm = T),
+                   n_away = sum(home_flag == 0,na.rm = T),
+                   home_fraction = n_home/(n_home+n_away),
+                   Mean_home_pm25 = mean(pm25_larpa_ave[home_flag==1],na.rm = TRUE),
+                   Mean_away_pm25 = mean(pm25_larpa_ave[home_flag==0],na.rm = TRUE)) %>% 
   dplyr::left_join(
     all_merged %>% 
       dplyr::select(pa_file,gps_file,pa_id,gps_id,hhid) %>% 
@@ -96,8 +137,12 @@ knitr::kable(summary_pa_deployment, digits = 2, caption = "PurpleAir Summary Tab
 
 summary_overall <- summary_pa_deployment %>% 
   dplyr::group_by(sampletype) %>%
-  dplyr::summarise(N = n(), Min = min(Min,na.rm = TRUE), Median = median(Median,na.rm = TRUE),
-                   Mean = mean(Mean,na.rm = TRUE), SD = sd(SD,na.rm = TRUE), Max = max(Max,na.rm = TRUE))
+  dplyr::summarise(N = n(), 
+                   Min_pm25 = min(Min_pm25,na.rm = TRUE), 
+                   Median_pm25 = median(Median_pm25,na.rm = TRUE),
+                   Mean_pm25 = mean(Mean_pm25,na.rm = TRUE), 
+                   Max_pm25 = max(Max_pm25,na.rm = TRUE),
+                   SD_pm25 = sd(SD_pm25,na.rm = TRUE))
 knitr::kable(summary_overall, digits = 2, caption = "PurpleAir Overall Summary Table")
 
 #Write summary stats to an excel workbook
@@ -109,9 +154,7 @@ openxlsx::write.xlsx(list_of_datasets, file = paste0("../results/Summary Statist
 
 
 # Geo-spatial analysis
-* What fraction of exposure happens at home?
-* Get list of home GPSs, calculate fraction of exposure near there.
-
+* Hot spots?
 ```{r geo-spatial-analysis, fig.width=7, fig.height=4}
 
 
@@ -124,7 +167,7 @@ openxlsx::write.xlsx(list_of_datasets, file = paste0("../results/Summary Statist
 
 ```{r boxplots_usage, fig.width=7, fig.height=4}
 
-g_boxplot <- ggplot(summary_pa_deployment,aes(x=sampletype, y = Mean)) +
+g_boxplot <- ggplot(summary_pa_deployment,aes(x=sampletype, y = Mean_pm25)) +
   geom_boxplot(alpha = 0.25) +
   stat_summary(fun.y=mean, colour="blue", geom="point",
                shape=18, size=4.5,alpha = 0.5)+
@@ -138,7 +181,7 @@ g_boxplot
 summary_wide <- tidyr::pivot_wider(summary_pa_deployment,
                                    id_cols = c('hhid','sampletype'),
                                    names_from = sampletype ,
-                                   values_from = c('Mean','N_gps_hours'))
+                                   values_from = c('Mean_pm25','N_gps_samples'))
 
 # # g_mother_child <- summary_wide %>% ggplot(aes(x=Mean_m, y = Mean_c)) +
 # #   geom_point(alpha = 0.25) +  
@@ -151,27 +194,27 @@ summary_wide <- tidyr::pivot_wider(summary_pa_deployment,
 ###Spatial Results
 
 # 
-# # mapbase <- get_googlemap(center = c(mean(summary_pa_deployment$Median_lon),mean(summary_pa_deployment$Median_lat)), zoom = 12,
+# # mapbase <- get_googlemap(center = c(mean(summary_pa_deployment$Mode_lon),mean(summary_pa_deployment$Mode_lat)), zoom = 12,
 # #                          color = "color",
 # #                          style = "feature:road|visibility:on&style=element:labels|visibility:on&style=feature:administrative|visibility:on")
 # # #Map showing average exposure and median location. Different shape by sample type.
 # # gg_ave <- ggmap(mapbase) +
-# #   geom_point(data = summary_pa_deployment, aes(x = Median_lon, y = Median_lat, color=Mean,shape =sampletype))+
+# #   geom_point(data = summary_pa_deployment, aes(x = Mode_lon, y = Mode_lat, color=Mean,shape =sampletype))+
 # #   scale_size_continuous(breaks = round) 
 # # gg_ave <- ggplotly(gg_ave)
-# 
+
 pal <- colorNumeric(
-  palette = colorRampPalette(c('green', 'red'))(20),
+  palette = colorRampPalette(c('green', 'yellow','red'))(20),
   domain = c(0,300))
 
 gg_ave <- leaflet() %>%
   addTiles() %>%  # use the default base map which is OpenStreetMap tiles
   # addProviderTiles(providers$Esri.WorldImagery) %>% #Test this baby out.
-  addCircleMarkers(lng=summary_pa_deployment$Median_lon, lat=summary_pa_deployment$Median_lat,
-                   popup=paste(summary_pa_deployment$hhid,', ',summary_pa_deployment$sampletype,', ', summary_pa_deployment$Mean),
+  addCircleMarkers(lng=summary_pa_deployment$Mode_lon, lat=summary_pa_deployment$Mode_lat,
+                   popup=paste(summary_pa_deployment$hhid,', ',summary_pa_deployment$sampletype,', ', summary_pa_deployment$Mean_pm25),
                    # fillColor = all_merged$pm25_larpa_ave
-                   radius =  (summary_pa_deployment$Mean+10)/10,
-                   color = pal(summary_pa_deployment$Mean)
+                   radius =  (summary_pa_deployment$Mean_pm25+10)/10,
+                   color = pal(summary_pa_deployment$Mean_pm25)
   )
 
 saveWidget(gg_ave, '~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/maps/ave_map_jacaranda.html', selfcontained = T)
@@ -200,9 +243,16 @@ map_by_filedeployment <- function(all_merged,pal) {
 }
 
 #Map for each deployment
+#.001 degrees ~ 111m, .0001 degrees ~ 11.1m
 all_merged %>%
   dplyr::group_by(hhid) %>%
   dplyr::do(a=map_by_filedeployment(.,pal))
+
+all_merged %>%
+  dplyr::mutate(hhid = "all") %>% 
+  dplyr::do(a=map_by_filedeployment(.,pal))
+
+
 
 
 ```
@@ -228,16 +278,20 @@ all_merged %>%
 
 ```{r save_data}
 
+saveRDS(all_merged,file="processed data/all_merged.RDS")
+write.xlsx(all_merged,file="processed data/all_merged.xlsx")
+
 list_of_datasets <- list(
   "PurpleAir and GPS"=summary_pa_deployment,
+  "summary_overall" = summary_overall,
   "ODK_start_end" = odkstartend
-  )
+)
 
 filename = paste0("QA Reports/QA_PA_GPS_ODK_",Sys.Date(),".xlsx")
 
 write.xlsx(list_of_datasets,file = filename)
 
 source('r_scripts/emailfun.R')
-emailfun(email,filename)
+# emailfun(email,filename)
 
 ```
