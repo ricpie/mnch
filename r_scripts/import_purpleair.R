@@ -9,6 +9,8 @@ library(tidyfast)
 # devtools::install_github("dkahle/ggmap")
 source('r_scripts/load.R')
 source('r_scripts/plot_deployments.R')
+local_tz = 'Africa/Nairobi'
+
 # source('r_scripts/import_odk.R')
 # install.packages('MazamaSpatialUtils')
 # devtools::install_github('MazamaScience/MazamaCoreUtils')

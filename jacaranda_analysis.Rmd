@@ -61,13 +61,12 @@ as.data.frame(gps_data) %>%
   dplyr::group_by(filename) %>%
   dplyr::do(f=plot_gps_files(.))
 
-
+#Distance calculation constants
 R = 6371e3 #meters - radius of earth
 phi_fun = function(lat) {lat*pi/180}
 phi_delta = function(lat1,lat2) {(lat1-lat2)*pi/180}
 lambda_delta_fun = function(lon1,lon2) {(lon2-lon1)*pi/180}
 x_fun = function(lambda_delta,phi){lambda_delta*cos(phi)}
-
 
 #Merge data and clean it up
 all_merged = merge(pa_data,
@@ -95,6 +94,8 @@ all_merged = merge(pa_data,
                 d_meters = R * sqrt(x^2 + y^2),
                 home_flag = ifelse(d_meters < home_threshold_meters,1,0)) %>% 
   dplyr::ungroup() 
+
+skimr::skim(all_merged)
 
 ```
 
@@ -264,10 +265,10 @@ all_merged %>%
 # pa_data_temp <- all_merged %>% dplyr::filter(!hhid %like% "AMBIENT") 
 
 #Plot each hhid
-pa_ambient = all_merged %>% dplyr::filter(hhid %like% "AMBIENT")
+pa_ambient = all_merged %>% dplyr::filter(hhid %like% "Ambient")
 
 all_merged %>% 
-  dplyr::filter(!hhid %like% "AMBIENT") %>% 
+  dplyr::filter(!hhid %like% "Ambient") %>% 
   dplyr::group_by(hhid) %>%
   dplyr::do(f = plot_by_filedeployment(.,pa_ambient))
 

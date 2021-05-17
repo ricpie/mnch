@@ -6,6 +6,7 @@ path_inventory = "~/Dropbox/Jacaranda Kenya Field Folder/Data"
 path_test_gps = "GPS Tests"
 path_study_gps = "~/Dropbox/Jacaranda Kenya Field Folder/Data/GPS"
 path_temp_gps = path_study_gps
+local_tz = 'Africa/Nairobi'
 
 
 ##### Import GPS data

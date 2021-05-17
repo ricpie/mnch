@@ -3,7 +3,12 @@
 library(data.table)
 library(tidyverse)
 library(readr)
+local_tz = 'Africa/Nairobi'
+
 not_all_na <- function(x) any(!is.na(x))
+
+choices_odk <- read_xlsx("~/Dropbox/Jacaranda Kenya Field Folder/Sampling forms/ODK/Air_InstrumentEndODK_MNCH_v6_current.xlsx",
+                         sheet = "choices",col_names = c("key","num","description"))
 
 
 #Import ODK start files
@@ -68,7 +73,8 @@ odkend_multiple_activities = as.data.frame(rbindlist(
                               "I1.3_starttime","K4_starttime","L1.3_starttime", "M1.3_starttime"),sep = "", remove = F, na.rm = TRUE) %>% 
   tidyr::unite("date",c("E1.2_date","F1.2_date","G1.2_date","H1.2_date",
                         "I1.2_date","K2_startdate","L1.2_date","M1.2_date"),sep = "", remove = F, na.rm = TRUE) %>%
-  tidyr::unite("K5_activities",c("K5_activities","K5_activities_other"),sep = "", remove = F, na.rm = TRUE) %>%
+  dplyr::mutate(K5_activities_other = gsub(" ","_",K5_activities_other)) %>% 
+  tidyr::unite("K5_activities",c("K5_activities","K5_activities_other"),sep = " ", remove = F, na.rm = TRUE) %>%
   dplyr::mutate(K5_activities = gsub("other","",K5_activities),
                 datetime_start = as.POSIXct(paste(date,start_time),tz = local_tz),
                 datetime_end = as.POSIXct(paste(date,end_time),tz = local_tz)) %>% 
@@ -83,10 +89,11 @@ odkend_multiple_activities = as.data.frame(rbindlist(
 odkend_transport1 <- odkend %>% 
   select(KEY,starts_with("J_"),-ends_with("otheractivity")) %>% 
   setNames(gsub("J_Firstactivity-","", names(.))) %>% 
-  tidyr::unite("J5_activities",c("J5_activities","J5_activities_other"),sep = "", remove = F, na.rm = TRUE) %>%
-  tidyr::unite("J6_transportation",c("J6_transportation","J6_transportation_other"),sep = "", remove = F, na.rm = TRUE) %>%
-  tidyr::unite("J7_transportation2",c("J7_transportation2","J7_transportation2_other"),sep = "", remove = F, na.rm = TRUE) %>%
-  tidyr::unite("J8_smokefumes",c("J8_smokefumes","J8_smokefumes_other"),sep = "", remove = F, na.rm = TRUE) %>%
+  dplyr::mutate(J5_activities_other = gsub(" ","_",J5_activities_other)) %>% 
+  tidyr::unite("J5_activities",c("J5_activities","J5_activities_other"),sep = " ", remove = F, na.rm = TRUE) %>%
+  tidyr::unite("J6_transportation",c("J6_transportation","J6_transportation_other"),sep = " ", remove = F, na.rm = TRUE) %>%
+  tidyr::unite("J7_transportation2",c("J7_transportation2","J7_transportation2_other"),sep = " ", remove = F, na.rm = TRUE) %>%
+  tidyr::unite("J8_smokefumes",c("J8_smokefumes","J8_smokefumes_other"),sep = " ", remove = F, na.rm = TRUE) %>%
   dplyr::mutate(J5_activities = gsub("other","",J5_activities),
                 J6_transportation = gsub("other","",J6_transportation),
                 J7_transportation2 = gsub("other","",J7_transportation2),
@@ -94,27 +101,36 @@ odkend_transport1 <- odkend %>%
   dplyr::rename(location_visit = J_firstactivitylog) %>% 
   setNames(gsub("J","K", names(.),ignore.case = T)) %>% 
   setNames(gsub("K_date","date", names(.),ignore.case = T)) %>% 
-  dplyr::select(-ends_with('other'))
-names(odkend_transport1)
+  dplyr::select(-ends_with('other'),-K7_transportation2,-location_visit)
+# names(odkend_transport1)
 
 odkend_transport2 <- odkend_multiple_activities %>% 
   dplyr::filter(!K5_activities %in% "") %>%
   dplyr::select(-question) %>% 
-  tidyr::unite("K7_transportation2",c("K7_transportation2","K7_transportation2_other"),sep = "", remove = F, na.rm = TRUE) %>%
-  tidyr::unite("K8_smokefumes",c("K8_smokefumes","K8_smokefumes_other"),sep = "", remove = F, na.rm = TRUE) %>%
+  tidyr::unite("K7_transportation2",c("K7_transportation2","K7_transportation2_other"),sep = " ", remove = F, na.rm = TRUE) %>%
+  tidyr::unite("K8_smokefumes",c("K8_smokefumes","K8_smokefumes_other"),sep = " ", remove = F, na.rm = TRUE) %>%
   setNames(gsub("K_Firstactivity-K","", names(.))) %>% 
   setNames(gsub("K_","", names(.),ignore.case = T)) %>% 
   dplyr::rename(location_visit = K1_activity2_other) %>% 
-  dplyr::select(-ends_with('other'))
+  dplyr::select(-ends_with('other'),-K7_transportation2,-location_visit) #K7_transportation2 has nothing unique
 
-odkend_transport <- rbind(odkend_transport1,odkend_transport2)
+odkend_transport_review <- rbind(odkend_transport1,odkend_transport2) #Wide version for reviewing.
+
+odkend_transport <- rbind(odkend_transport1,odkend_transport2) %>% 
+  tidyr::pivot_longer(cols = K6_transportation:K9_childwith) %>% 
+  separate_rows(value,sep = " ") %>% 
+  dplyr::mutate(value = gsub(pattern = " ","",value)) %>% 
+  dplyr::filter(complete.cases(.),
+                ! value == "") 
+
 
 odkend_survey <- odkend %>%   
   select(-starts_with("J_")) 
 
 odkend_time_activities <- odkend_multiple_activities %>% 
-              dplyr::filter(K5_activities %in% "") %>% 
-              dplyr::select(KEY,question,datetime_start,datetime_end)
+  dplyr::filter(K5_activities != "") %>% 
+  separate_rows(K5_activities,sep = " ") %>% 
+  dplyr::select(KEY,question,K5_activities,datetime_start,datetime_end)
 
 
 saveRDS(odkstart,'~/Dropbox/Jacaranda Kenya Field Folder/Data/ODK Data/odkstart_processed.RDS')
