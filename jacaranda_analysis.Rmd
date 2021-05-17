@@ -93,7 +93,8 @@ all_merged = merge(pa_data,
                 y = phi_delta(lat,Mode_lat),
                 d_meters = R * sqrt(x^2 + y^2),
                 home_flag = ifelse(d_meters < home_threshold_meters,1,0)) %>% 
-  dplyr::ungroup() 
+  dplyr::ungroup() %>% 
+  dplyr::select(-lambda_delta,-phi,-x,-y,filesize_kb,-filename.y)
 
 skimr::skim(all_merged)
 
@@ -107,6 +108,11 @@ skimr::skim(all_merged)
 * Get list of home GPSs, calculate fraction of exposure near there.
 
 ```{r summarize_data}
+
+summary_by_activity <- all_merged %>% 
+  dplyr::group_by(sampletype, hhid) 
+
+
 
 summary_pa_deployment <- all_merged %>% 
   dplyr::group_by(sampletype, hhid) %>%
@@ -125,7 +131,7 @@ summary_pa_deployment <- all_merged %>%
                    n_away = sum(home_flag == 0,na.rm = T),
                    home_fraction = n_home/(n_home+n_away),
                    Mean_home_pm25 = mean(pm25_larpa_ave[home_flag==1],na.rm = TRUE),
-                   Mean_away_pm25 = mean(pm25_larpa_ave[home_flag==0],na.rm = TRUE)) %>% 
+                   Mean_away_pm25 = mean(pm25_larpa_ave[home_flag==0],na.rm = TRUE)) %>%
   dplyr::left_join(
     all_merged %>% 
       dplyr::select(pa_file,gps_file,pa_id,gps_id,hhid) %>% 
@@ -143,23 +149,16 @@ summary_overall <- summary_pa_deployment %>%
                    Median_pm25 = median(Median_pm25,na.rm = TRUE),
                    Mean_pm25 = mean(Mean_pm25,na.rm = TRUE), 
                    Max_pm25 = max(Max_pm25,na.rm = TRUE),
-                   SD_pm25 = sd(SD_pm25,na.rm = TRUE))
+                   SD_pm25 = sd(SD_pm25,na.rm = TRUE),
+                   Mean_home_pm25 = mean(Mean_home_pm25,na.rm = TRUE),
+                   Mean_away_pm25 = mean(Mean_away_pm25,na.rm = TRUE))
 knitr::kable(summary_overall, digits = 2, caption = "PurpleAir Overall Summary Table")
 
-#Write summary stats to an excel workbook
-list_of_datasets <- list("Deployment Summary" = summary_pa_deployment,"Overall Summary" = summary_overall)
-openxlsx::write.xlsx(list_of_datasets, file = paste0("../results/Summary Statistics ",format(now(),"%d-%b-%y"),".xlsx"))
-
-```
-
-
-
-# Geo-spatial analysis
-* Hot spots?
-```{r geo-spatial-analysis, fig.width=7, fig.height=4}
 
 
 ```
+
+
 
 
 # Plots
@@ -167,6 +166,19 @@ openxlsx::write.xlsx(list_of_datasets, file = paste0("../results/Summary Statist
 * Save html maps.
 
 ```{r boxplots_usage, fig.width=7, fig.height=4}
+
+g_boxplot_distance <- summary_pa_deployment %>% 
+  pivot_longer(cols = c("Mean_home_pm25","Mean_away_pm25")) %>% 
+  ggplot(aes(x=name, y = value, colour = name)) +
+  geom_boxplot(alpha = 0.25) +
+  stat_summary(fun.y=mean, colour="blue", geom="point",
+               shape=18, size=4.5,alpha = 0.5)+
+  stat_summary(fun.data = give.mean, geom = "text",colour="blue") +
+  geom_jitter(height = 0,width = 0.2,alpha = 0.25) +
+  stat_summary(fun.data = give.n, geom = "text") +
+  labs(y="Mean PM2.5 Concentration (ugm-3)",x="") +
+  theme(legend.title = element_blank())
+g_boxplot_distance
 
 g_boxplot <- ggplot(summary_pa_deployment,aes(x=sampletype, y = Mean_pm25)) +
   geom_boxplot(alpha = 0.25) +
@@ -191,10 +203,14 @@ summary_wide <- tidyr::pivot_wider(summary_pa_deployment,
 # #   theme(legend.title = element_blank())
 # # g_mother_child
 
+```
+
 
 ###Spatial Results
+# Geo-spatial analysis
+* Hot spots
+```{r spatial_usage, fig.width=7, fig.height=4}
 
-# 
 # # mapbase <- get_googlemap(center = c(mean(summary_pa_deployment$Mode_lon),mean(summary_pa_deployment$Mode_lat)), zoom = 12,
 # #                          color = "color",
 # #                          style = "feature:road|visibility:on&style=element:labels|visibility:on&style=feature:administrative|visibility:on")
@@ -258,7 +274,7 @@ all_merged %>%
 
 ```
 
-
+# Ambient plots
 ```{r ambient_plots}
 
 #Different plot for each household # 
@@ -276,16 +292,21 @@ all_merged %>%
 ```
 
 
-
+# Save data
 ```{r save_data}
+
+#Write summary stats to an excel workbook
+list_of_datasets <- list("Deployment Summary" = summary_pa_deployment,
+                         "Overall Summary" = summary_overall)
+openxlsx::write.xlsx(list_of_datasets, file = paste0("../results/Summary Statistics ",format(now(),"%d-%b-%y"),".xlsx"))
+
 
 saveRDS(all_merged,file="processed data/all_merged.RDS")
 write.xlsx(all_merged,file="processed data/all_merged.xlsx")
 
 list_of_datasets <- list(
   "PurpleAir and GPS"=summary_pa_deployment,
-  "summary_overall" = summary_overall,
-  "ODK_start_end" = odkstartend
+  "summary_overall" = summary_overall
 )
 
 filename = paste0("QA Reports/QA_PA_GPS_ODK_",Sys.Date(),".xlsx")

@@ -133,18 +133,18 @@ odkend_time_activities <- odkend_multiple_activities %>%
   dplyr::select(KEY,question,K5_activities,datetime_start,datetime_end)
 
 
-saveRDS(odkstart,'~/Dropbox/Jacaranda Kenya Field Folder/Data/ODK Data/odkstart_processed.RDS')
-write_xlsx(odkstart,'~/Dropbox/Jacaranda Kenya Field Folder/Data/ODK Data/odkstart_processed.xlsx')
+saveRDS(odkstart,'processed data/odkstart_processed.RDS')
+write_xlsx(odkstart,'processed data/odkstart_processed.xlsx')
 
 #Survey portion of odkend
-saveRDS(odkend_survey,'~/Dropbox/Jacaranda Kenya Field Folder/Data/ODK Data/odkend_survey_processed.RDS')
-write_xlsx(odkend_survey,'~/Dropbox/Jacaranda Kenya Field Folder/Data/ODK Data/odkend_survey_processed.xlsx')
+saveRDS(odkend_survey,'processed data/odkend_survey_processed.RDS')
+write_xlsx(odkend_survey,'processed data/odkend_survey_processed.xlsx')
 
 #Transport portion of odkend
-saveRDS(odkend_transport,'~/Dropbox/Jacaranda Kenya Field Folder/Data/ODK Data/odkend_transport_processed.RDS')
-write_xlsx(odkend_transport,'~/Dropbox/Jacaranda Kenya Field Folder/Data/ODK Data/odkend_transport_processed.xlsx')
+saveRDS(odkend_transport,'processed data/odkend_transport_processed.RDS')
+write_xlsx(odkend_transport,'processed data/odkend_transport_processed.xlsx')
 
-saveRDS(odkend_time_activities,'~/Dropbox/Jacaranda Kenya Field Folder/Data/ODK Data/odkend_time_activities_processed.RDS')
-write_xlsx(odkend_time_activities,'~/Dropbox/Jacaranda Kenya Field Folder/Data/ODK Data/odkend_time_activities_processed.xlsx')
+saveRDS(odkend_time_activities,'processed data/odkend_time_activities_processed.RDS')
+write_xlsx(odkend_time_activities,'processed data/odkend_time_activities_processed.xlsx')
 
 

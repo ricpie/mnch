@@ -278,7 +278,7 @@ plot_deployment_merged <- function(all_merged_temp){
 
 give.n <- function(x){return(c(y = 0, label = length(x)))}
 
-give.mean <- function(x){return(c(y =mean(x)+.1, label = round(mean(x),digits=2)))}
+give.mean <- function(x){return(c(y =mean(x)+.1, label = round(mean(x),digits=1)))}
 
 #To make box and whiskers quantiles rather than IQRs.
 f <- function(x) {
