@@ -23,12 +23,6 @@ gps_paths <- list.files(
   print()
 
 #Import GPS data, format the time stamp, get rid of cruft
-gps_data = data.table::rbindlist(
-  lapply(gps_paths,function(x) read_csv(x,
-                                        col_names = TRUE,
-                                        col_types = cols(.default = col_character()))),
-  fill=TRUE) 
-
 import_gps_fun <-function(x){
   readr::read_csv(x,
                   col_names = TRUE,

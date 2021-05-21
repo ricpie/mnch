@@ -114,35 +114,87 @@ odkend_transport2 <- odkend_multiple_activities %>%
   dplyr::rename(location_visit = K1_activity2_other) %>% 
   dplyr::select(-ends_with('other'),-K7_transportation2,-location_visit) #K7_transportation2 has nothing unique
 
-odkend_transport_review <- rbind(odkend_transport1,odkend_transport2) #Wide version for reviewing.
-
+#Transport portion of odkend
 odkend_transport <- rbind(odkend_transport1,odkend_transport2) %>% 
   tidyr::pivot_longer(cols = K6_transportation:K9_childwith) %>% 
   separate_rows(value,sep = " ") %>% 
   dplyr::mutate(value = gsub(pattern = " ","",value)) %>% 
-  dplyr::filter(complete.cases(.),
-                ! value == "") 
+  dplyr::filter(complete.cases(.),! value == "") 
+
+odkend_transport_review <- rbind(odkend_transport1,odkend_transport2) #Wide version for reviewing.
 
 
-odkend_survey <- odkend %>%   
-  select(-starts_with("J_")) 
 
-odkend_time_activities <- odkend_multiple_activities %>% 
-  dplyr::filter(K5_activities != "") %>% 
-  separate_rows(K5_activities,sep = " ") %>% 
-  dplyr::select(KEY,question,K5_activities,datetime_start,datetime_end)
-
+# Save data ---------------------------------------------------------------
+## Prepare data frames for output/saving
 
 saveRDS(odkstart,'processed data/odkstart_processed.RDS')
 write_xlsx(odkstart,'processed data/odkstart_processed.xlsx')
 
 #Survey portion of odkend
+odkend_survey <- odkend %>%   
+  dplyr::select(-starts_with("J_"),-ends_with("InsertID")) %>% 
+  tidyr::unite(`D_followupquestions-D4_problemsdetailed`,`D_followupquestions-D4_problemsdetailed_other`,sep = " ", remove = F, na.rm = TRUE) %>%
+  dplyr::mutate(`D_followupquestions-D4_problemsdetailed` = gsub("other","",`D_followupquestions-D4_problemsdetailed`)) %>% 
+  tidyr::pivot_longer(cols = `B_AmbientEnd-B2_problemsdetails`:`M_incense-M1_incensecoilyn`) %>% 
+  dplyr::mutate(description = case_when(name %like% "yn|backpackon" & value == 1 ~ "yes",
+                                       name %like% "yn|backpackon" & value == 2 ~ "no",
+                                       name %like% "lightingtype" & value == 1 ~ "Electric/battery/solar",
+                                       name %like% "lightingtype" & value == 2 ~ "Kerosene/covered",
+                                       name %like% "lightingtype" & value == 3 ~ "Kerosene/tin wick",
+                                       name %like% "lightingtype" & value == 4 ~ "Candle",
+                                       name %like% "insideoutside" & value == 1 ~ "Inside",
+                                       name %like% "insideoutside" & value == 2 ~ "Outside",
+                                       name %like% "whynotworn" & value == 1 ~ "Out in public",
+                                       name %like% "whynotworn" & value == 2 ~ "School/playground",
+                                       name %like% "whynotworn" & value == 3 ~ "Household",
+                                       name %like% "whynotworn" & value == 4 ~ "Workplace",
+                                       TRUE ~ value)) %>% 
+  dplyr::select(-value,-rcodef,-`B_AmbientEnd-B0_gps-Accuracy`,-`B_AmbientEnd-B0_gps-Altitude`) %>% 
+  tidyr::pivot_wider(names_from = name,values_from = description)
+
 saveRDS(odkend_survey,'processed data/odkend_survey_processed.RDS')
 write_xlsx(odkend_survey,'processed data/odkend_survey_processed.xlsx')
 
-#Transport portion of odkend
-saveRDS(odkend_transport,'processed data/odkend_transport_processed.RDS')
-write_xlsx(odkend_transport,'processed data/odkend_transport_processed.xlsx')
+
+odkend_transport_save <- odkend_transport %>% 
+  dplyr::filter(name == "K6_transportation") %>% 
+  dplyr::select(-K5_activities) %>% 
+  dplyr::full_join(choices_odk %>% 
+                     dplyr::filter(key == "transport") %>% 
+                     rename(value = num),
+                   by = "value") %>% 
+  dplyr::select(-name,-key,-value) %>% 
+  dplyr::select(KEY,description,datetime_start,datetime_end) %>% 
+  dplyr::distinct() %>% 
+  dplyr::left_join(odkend_survey %>%
+                     dplyr::select(KEY, survey_datetime_end, hhid),
+                   by = "KEY")
+
+saveRDS(odkend_transport_save,'processed data/odkend_transport_processed.RDS')
+write_xlsx(odkend_transport_save,'processed data/odkend_transport_processed.xlsx')
+
+
+#Save activities data
+odkend_time_activities <- rbind(odkend_multiple_activities %>% 
+                                  dplyr::filter(K5_activities != "") %>% 
+                                  separate_rows(K5_activities,sep = " ") %>% 
+                                  dplyr::select(KEY,K5_activities,datetime_start,datetime_end),
+                                odkend_transport %>%  
+                                  dplyr::select(KEY,K5_activities,datetime_start,datetime_end)
+) %>% 
+  dplyr::select(KEY,K5_activities,datetime_start,datetime_end) %>% 
+  dplyr::full_join(choices_odk %>% 
+                     dplyr::filter(key == "activity") %>% 
+                     rename(K5_activities = num),
+                   by = "K5_activities") %>% 
+  dplyr::mutate(description = case_when(is.na(description)~K5_activities,
+                                        TRUE ~description)) %>% 
+  dplyr::select(KEY,description,datetime_start,datetime_end) %>% 
+  dplyr::distinct() %>% 
+  dplyr::left_join(odkend_survey %>%
+                     dplyr::select(KEY, survey_datetime_end, hhid),
+                   by = "KEY")
 
 saveRDS(odkend_time_activities,'processed data/odkend_time_activities_processed.RDS')
 write_xlsx(odkend_time_activities,'processed data/odkend_time_activities_processed.xlsx')

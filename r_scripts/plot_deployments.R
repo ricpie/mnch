@@ -56,6 +56,23 @@ plot_gps_files <- function(gps_data_temp){
   }
 }
 
+# gps_data_temp <- gps_data[1:1000,]
+plotly_gps_files <- function(gps_data_temp){
+  
+  plot_name = paste0("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/GPS/gps_",
+                     file_path_sans_ext(basename(gps_data_temp$filename[1])))
+  # if(!file.exists(plot_name)){
+    
+    p1 <- plot_ly(gps_data_temp, x = ~local_time, y = ~lat, text = paste("Lat: ", gps_data_temp$lat),mode = "lines+markers",name = "Latitude over time")  
+    p2 <- plot_ly(gps_data_temp, x = ~local_time, y = ~lon, text = paste("Lon: ", gps_data_temp$lon),mode = "lines+markers",name = "Longitude over time")
+    p3 <- plot_ly(gps_data_temp, x = ~lat, y = ~lon,text = gps_data_temp$local_time,mode = "lines+markers",name = "Latitude vs. Longitude")
+    
+    fig <- subplot(p1, p2,p3,nrows = 3)
+    htmlwidgets::saveWidget(as_widget(fig), paste0(plot_name,".html"))
+    
+  # }
+}
+
 
 plot_deployment <- function(selected_preplacement,beacon_logger_data,pats_data_timeseries,
                             CO_calibrated_timeseries,tsi_timeseries,ecm_dot_data){

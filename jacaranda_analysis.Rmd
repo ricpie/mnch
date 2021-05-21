@@ -3,7 +3,7 @@ title: "jacaranda"
 author: "berkeley_air_monitoring_group"
 knit: (function(inputFile, encoding) { rmarkdown::render(inputFile, encoding = encoding, output_file = paste0(substr(inputFile,1,nchar(inputFile)-4),Sys.Date(),'.html')) })
 
-date: "Sep. 2 2020"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
   html_document:
     toc: true
@@ -59,7 +59,7 @@ as.data.frame(pa_data) %>%
 
 as.data.frame(gps_data) %>%
   dplyr::group_by(filename) %>%
-  dplyr::do(f=plot_gps_files(.))
+  dplyr::do(f=plotly_gps_files(.))
 
 #Distance calculation constants
 R = 6371e3 #meters - radius of earth
