@@ -402,7 +402,7 @@ plot_by_filedeployment <- function(pa_data_temp,pa_ambient) {
                       local_time < max(pa_data_temp$local_time,na.rm = T)) %>%
         ggplot() +
         geom_point(aes(x=local_time, y=pm25_larpa_ave),alpha = .2) +
-        geom_smooth(aes(x=local_time, y=pm25_larpa_ave),alpha = .2) +
+        geom_line(aes(x=local_time, y=current_temp_f),alpha = .2) +
         labs(title = "Ambient")
       
       

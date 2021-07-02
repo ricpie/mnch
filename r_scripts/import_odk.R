@@ -193,22 +193,22 @@ write_xlsx(odkstart,'Results/processed data/odkstart_processed.xlsx')
 # write_xlsx(odkend_survey,'Results/processed data/odkend_survey_processed.xlsx')
 
 
-odkend_transport_save <- odkend_transport %>% 
-  dplyr::filter(name == "K6_transportation") %>% 
-  dplyr::select(-K5_activities) %>% 
-  dplyr::full_join(choices_odk %>% 
-                     dplyr::filter(key == "transport") %>% 
-                     rename(value = num),
-                   by = "value") %>% 
-  dplyr::select(-name,-key,-value) %>% 
-  dplyr::select(KEY,description,datetime_start,datetime_end) %>% 
-  dplyr::distinct() %>% 
-  dplyr::left_join(odkend_survey %>%
-                     dplyr::select(KEY, survey_datetime_end, hhid),
-                   by = "KEY")
-
-saveRDS(odkend_transport_save,'Results/processed data/odkend_transport_processed.RDS')
-write_xlsx(odkend_transport_save,'Results/processed data/odkend_transport_processed.xlsx')
+# odkend_transport_save <- odkend_transport %>% 
+#   dplyr::filter(name == "K6_transportation") %>% 
+#   dplyr::select(-K5_activities) %>% 
+#   dplyr::full_join(choices_odk %>% 
+#                      dplyr::filter(key == "transport") %>% 
+#                      rename(value = num),
+#                    by = "value") %>% 
+#   dplyr::select(-name,-key,-value) %>% 
+#   dplyr::select(KEY,description,datetime_start,datetime_end) %>% 
+#   dplyr::distinct() %>% 
+#   dplyr::left_join(odkend_survey %>%
+#                      dplyr::select(KEY, survey_datetime_end, hhid),
+#                    by = "KEY")
+# 
+# saveRDS(odkend_transport_save,'Results/processed data/odkend_transport_processed.RDS')
+# write_xlsx(odkend_transport_save,'Results/processed data/odkend_transport_processed.xlsx')
 
 
 #Save activities data
