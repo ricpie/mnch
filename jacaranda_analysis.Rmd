@@ -195,7 +195,7 @@ skimr::skim(all_merged)
 
 
 summary_pa_deployment <- all_merged %>% 
-  dplyr::group_by(sampletype, hhid) %>%
+  dplyr::group_by(sampletype, hhid,region) %>%
   dplyr::summarise(N_gps_samples = sum(!is.na(lat)), 
                    N_pa_samples = sum(!is.na(pm25_larpa_ave)),
                    N_hours = difftime(max(local_time,na.rm = T),
@@ -220,7 +220,7 @@ summary_pa_deployment <- all_merged %>%
       dplyr::group_by(hhid) %>% 
       dplyr::filter(1 == row_number()),
     by = "hhid")
-DT::datatable(summary_pa_deployment, caption = "PurpleAir Summary Table","pipe")
+DT::datatable(summary_pa_deployment, caption = "PurpleAir Summary Table")
 
 summary_overall <- summary_pa_deployment %>% 
   dplyr::group_by(sampletype) %>%
@@ -232,7 +232,7 @@ summary_overall <- summary_pa_deployment %>%
                    SD_pm25 = sd(SD_pm25,na.rm = TRUE),
                    Mean_home_pm25 = mean(Mean_home_pm25,na.rm = TRUE),
                    Mean_away_pm25 = mean(Mean_away_pm25,na.rm = TRUE))
-knitr::kable(summary_overall, digits = 2, caption = "PurpleAir Overall Summary Table")
+DT::datatable(summary_overall, caption = "PurpleAir Overall Summary Table")
 
 
 ```
@@ -263,6 +263,7 @@ g_boxplot_distance <- summary_pa_deployment %>%
   geom_jitter(height = 0,width = 0.2,alpha = 0.25) +
   stat_summary(fun.data = give.n, geom = "text") +
   labs(y="Mean PM2.5 Concentration (ugm-3)",x="") +
+  theme(axis.text.x=element_text(angle=45)) +
   theme(legend.title = element_blank())
 g_boxplot_distance
 
@@ -276,6 +277,7 @@ g_boxplot <- ggplot(summary_pa_deployment,aes(x=sampletype, y = Mean_pm25)) +
   facet_grid(.~region) + 
   stat_summary(fun.data = give.n, geom = "text") +
   labs(y="Mean PM2.5 Concentration (ugm-3)",x="") +
+  theme(axis.text.x=element_text(angle=45)) +
   theme(legend.title = element_blank())
 g_boxplot
 
@@ -324,6 +326,7 @@ g_activity_boxplot <- ggplot(summary_by_activity,aes(x=activity_clean, y = Mean_
   facet_grid(.~region) + 
   stat_summary(fun.data = give.n, geom = "text") +
   labs(y="Mean PM2.5 Concentration (ugm-3)",x="") +
+  theme(axis.text.x=element_text(angle=45)) +
   theme(legend.title = element_blank())
 g_activity_boxplot
 
@@ -346,6 +349,7 @@ g_activity_bars_dose <- summary_by_activity %>%
   geom_bar(position="fill", stat="identity") + 
   facet_grid(.~region) + 
   labs(y="Percent of dose",x="") +
+  theme(axis.text.x=element_text(angle=45)) +
   scale_x_discrete(labels = NULL, breaks = NULL)
 g_activity_bars_dose
 
@@ -371,6 +375,7 @@ g_transport_boxplot <- ggplot(summary_by_transport,aes(x=transportation, y = Mea
   # geom_jitter(height = 0,width = 0.2,alpha = 0.25) +
   stat_summary(fun.data = give.n, geom = "text") +
   labs(y="Mean PM2.5 Concentration (ugm-3)",x="") +
+  theme(axis.text.x=element_text(angle=45)) +
   theme(legend.title = element_blank())
 g_transport_boxplot
 
@@ -386,7 +391,7 @@ g_timeofday_pa <- all_merged %>%
   scale_x_datetime(date_breaks = "3 hours") +
   theme(legend.title = element_blank()) + 
   geom_hline(aes(yintercept=10)) +
-  facet_grid(region~) + 
+  facet_grid(region~.) + 
   geom_text(aes(min(time_of_day),11,label = "             WHO Guideline (10 µg/m3)",vjust = 2)) +
   geom_hline(aes(yintercept=35)) +
   geom_text(aes(min(time_of_day),36,label = "             WHO Interim-1 Target (35 µg/m3)",vjust = 2))

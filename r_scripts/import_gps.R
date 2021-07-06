@@ -19,8 +19,7 @@ gps_paths <- list.files(
 ) %>%
   grep("csv", x = ., ignore.case = TRUE, value = TRUE) %>%
   grep("xls", x = ., ignore.case = TRUE, value = TRUE, invert = TRUE) %>%
-  grep("old ", x = ., ignore.case = TRUE, value = TRUE, invert = TRUE) %>%
-  print()
+  grep("old ", x = ., ignore.case = TRUE, value = TRUE, invert = TRUE) 
 
 #Import GPS data, format the time stamp, get rid of cruft
 import_gps_fun <-function(x){

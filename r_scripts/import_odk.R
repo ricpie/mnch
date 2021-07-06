@@ -212,44 +212,44 @@ write_xlsx(odkstart,'Results/processed data/odkstart_processed.xlsx')
 
 
 #Save activities data
-odkend_time_activities <- rbind.fill(odkend_multiple_activities %>%  #Has smoke sources and stove activity
-                                       separate_rows(K5_activities,sep = " ") %>% 
-                                       separate_rows(K8_smokefumes,sep = " ") %>% 
-                                       dplyr::mutate(smoke_sources = case_when(
-                                         K8_smokefumes %like% "1"  ~ "Cookstove",
-                                         K8_smokefumes %like% "2"  ~ "Trash burning",
-                                         K8_smokefumes  %like%  "3"  ~ "Kerosene lamp",
-                                         K8_smokefumes  %like%  "4"  ~ "Traffic",
-                                         K8_smokefumes  %like%  "5"  ~ "Cigarettes",
-                                         K8_smokefumes  %like%  "6"  ~ "Candles",
-                                         K8_smokefumes  %like%  "7"  ~ "Generator",
-                                         K8_smokefumes  %like%  "8"  ~ "Smoke from neighbor's house",
-                                         K8_smokefumes  %like%  "9"  ~ "Incense",
-                                         K8_smokefumes  %like%  "99"  ~ "None",
-                                         K8_smokefumes  %like%  "Other"  ~ "Other",
-                                         TRUE ~ "")) %>% 
-                                       dplyr::select(KEY,K5_activities,smoke_sources,datetime_start,datetime_end),
-                                     odkend_transport %>%  
-                                       dplyr::select(KEY,K5_activities,datetime_start,datetime_end) %>% 
-                                       separate_rows(K5_activities,sep = " ") %>% 
-                                       dplyr::distinct() %>% 
-                                       dplyr::filter(!is.na(K5_activities),
-                                                     ! K5_activities == "")
-) %>% 
-  dplyr::full_join(choices_odk %>% 
-                     dplyr::filter(key == "activity") %>% 
-                     dplyr::rename(K5_activities = num),
-                   by = "K5_activities") %>% 
-  dplyr::mutate(description = case_when(is.na(description)~K5_activities,
-                                        TRUE ~ description)) %>% 
-  dplyr::select(KEY,description,smoke_sources,datetime_start,datetime_end) %>%
-  dplyr::distinct() %>% 
-  dplyr::left_join(odkend_survey %>%
-                     dplyr::select(KEY, survey_datetime_end, hhid),
-                   by = "KEY") %>% 
-  dplyr::filter(description != "")
-
-saveRDS(odkend_time_activities,'Results/processed data/odkend_time_activities_processed.RDS')
-write_xlsx(odkend_time_activities,'Results/processed data/odkend_time_activities_processed.xlsx')
-
+# odkend_time_activities <- rbind.fill(odkend_multiple_activities %>%  #Has smoke sources and stove activity
+#                                        separate_rows(K5_activities,sep = " ") %>% 
+#                                        separate_rows(K8_smokefumes,sep = " ") %>% 
+#                                        dplyr::mutate(smoke_sources = case_when(
+#                                          K8_smokefumes %like% "1"  ~ "Cookstove",
+#                                          K8_smokefumes %like% "2"  ~ "Trash burning",
+#                                          K8_smokefumes  %like%  "3"  ~ "Kerosene lamp",
+#                                          K8_smokefumes  %like%  "4"  ~ "Traffic",
+#                                          K8_smokefumes  %like%  "5"  ~ "Cigarettes",
+#                                          K8_smokefumes  %like%  "6"  ~ "Candles",
+#                                          K8_smokefumes  %like%  "7"  ~ "Generator",
+#                                          K8_smokefumes  %like%  "8"  ~ "Smoke from neighbor's house",
+#                                          K8_smokefumes  %like%  "9"  ~ "Incense",
+#                                          K8_smokefumes  %like%  "99"  ~ "None",
+#                                          K8_smokefumes  %like%  "Other"  ~ "Other",
+#                                          TRUE ~ "")) %>% 
+#                                        dplyr::select(KEY,K5_activities,smoke_sources,datetime_start,datetime_end),
+#                                      odkend_transport %>%  
+#                                        dplyr::select(KEY,K5_activities,datetime_start,datetime_end) %>% 
+#                                        separate_rows(K5_activities,sep = " ") %>% 
+#                                        dplyr::distinct() %>% 
+#                                        dplyr::filter(!is.na(K5_activities),
+#                                                      ! K5_activities == "")
+# ) %>% 
+#   dplyr::full_join(choices_odk %>% 
+#                      dplyr::filter(key == "activity") %>% 
+#                      dplyr::rename(K5_activities = num),
+#                    by = "K5_activities") %>% 
+#   dplyr::mutate(description = case_when(is.na(description)~K5_activities,
+#                                         TRUE ~ description)) %>% 
+#   dplyr::select(KEY,description,smoke_sources,datetime_start,datetime_end) %>%
+#   dplyr::distinct() %>% 
+#   dplyr::left_join(odkend_survey %>%
+#                      dplyr::select(KEY, survey_datetime_end, hhid),
+#                    by = "KEY") %>% 
+#   dplyr::filter(description != "")
+# 
+# saveRDS(odkend_time_activities,'Results/processed data/odkend_time_activities_processed.RDS')
+# write_xlsx(odkend_time_activities,'Results/processed data/odkend_time_activities_processed.xlsx')
+# 
 
