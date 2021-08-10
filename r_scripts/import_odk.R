@@ -37,8 +37,18 @@ odkstart = read_csv("~/Dropbox/Jacaranda Kenya Field Folder/Data/ODK Data/MNCH_I
   dplyr::mutate(datetimestart = as.POSIXct(paste0(AsamplingtypeA2date,AsamplingtypeA21time),tz = local_tz),
                 hhid = consentgivenCHHInfoC1hhid) %>% 
   dplyr::select(-rcodefref,-rcodefothersp,-metainstanceID,-SubmitterID,-SubmitterName,-AttachmentsPresent,
-                -AttachmentsExpected,-Status,-consentgivenCHHInfoC1hhid)
-
+                -AttachmentsExpected,-Status,-consentgivenCHHInfoC1hhid) %>% 
+  dplyr::mutate(BAmbientStartB1gpsLatitude = as.numeric(BAmbientStartB1gpsLatitude),
+                BAmbientStartB1gpsLongitude = as.numeric(BAmbientStartB1gpsLongitude),
+                BAmbientStartB1gpsLatitude = case_when(grepl("Slaughter",BAmbientStartB2location) ~ -1.2546248,
+                                                       TRUE ~ BAmbientStartB1gpsLatitude),
+                BAmbientStartB1gpsLongitude = case_when(grepl("Slaughter",BAmbientStartB2location) ~ 36.8749718,
+                                                        TRUE ~ BAmbientStartB1gpsLongitude),
+                hhid = case_when(BAmbientStartB2location %like% "Slaughter" ~ "AmbientKiamiako",
+                                 BAmbientStartB2location %like% "Dagoretti" ~ "AmbientDagorettiNorth",
+                                 BAmbientStartB2location %like% "Kabiro" ~ "AmbientKabiro",
+                                 BAmbientStartB2location %like% "Primary" ~ "AmbientKiboro",
+                                 TRUE ~ hhid))
 
 
 # Import ODK end files ----------------------------------------------------

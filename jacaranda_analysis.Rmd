@@ -12,11 +12,16 @@ output:
     self_contained: yes
 ---
 
+# Analyze MNCH data
+### Break out activity types from Errands only, to errands home vs. away?
+
 ```{r global_options, include=FALSE,echo = FALSE}
-email = 1
+
+email = 0
 timezone = 'GMT'
 local_tz = 'Africa/Nairobi'
 home_threshold_meters = 10 #meters
+reimport = TRUE #Set to true if we have new GPS or PA data.
 
 
 source('r_scripts/load.R')
@@ -36,10 +41,17 @@ knitr::opts_chunk$set(fig.path='../Results/figures/', warning=FALSE, message=FAL
 
 # Import GPS, PA, ODK data
 
-```{r load_merge,cache=TRUE,echo = FALSE}
+```{r load_merge,cache=TRUE,echo = FALSE,include=FALSE}
 source('r_scripts/import_odk.R')
-source('r_scripts/import_gps.R')
-source('r_scripts/import_purpleair.R')
+
+if(reimport==TRUE){
+  source('r_scripts/import_gps.R')
+  source('r_scripts/import_purpleair.R')
+}else{
+  gps_data <- readRDS("Results/gps_data.RDS")
+  pa_data <- readRDS("Results/processed data/pa_data.rds")
+}
+
 
 # Merge GPS, PA data.  PA data should already be merged with ODK data.
 #Merge PA data with ODK data
@@ -52,7 +64,7 @@ source('r_scripts/import_purpleair.R')
 ```
 
 # Clean the ODK time activity and transport data, create time series of it.
-```{r clean_odk,cache=TRUE,echo = FALSE}
+```{r clean_odk,cache=TRUE,echo = FALSE,include=FALSE}
 
 
 #Import and clean the odk transport data reviewed by Monica.
@@ -83,23 +95,35 @@ odkend_transport_tseries <- odkend_transport_processed_mm %>%
   dplyr::rename(transportation = description)
 
 
-#Import the full clean set.  Merge with the corrected one
-odkend_time_activities = read_rds('Results/processed data/odkend_time_activities_processed.RDS') %>% 
-  dplyr::left_join(read_xlsx("~/Dropbox/Jacaranda Kenya/Data Analysis mnch/Results/processed data/odkend_time_activities_processed_mm.xlsx") #%>% 
-                   # dplyr::select(-description),
-                   # by = c("KEY","survey_datetime_end","hhid","description")
-  ) %>% 
+odkend_time_activities <- read_xlsx("~/Dropbox/Jacaranda Kenya/Data Analysis mnch/Results/processed data/odkend_time_activities_processed_mm_7-7-21.xlsx") %>% 
   distinct() %>% 
   clean_names() %>% 
+  dplyr::mutate(
+    start = as.POSIXct(start,tz = local_tz),
+    end = as.POSIXct(end,tz = local_tz),
+    datetime_start = case_when(is.na(start) ~ datetime_start,
+                               datetime_start != start ~ start,
+                               TRUE ~ datetime_start),
+    datetime_end =  case_when(is.na(end) ~ datetime_end,
+                              datetime_end != end ~ end,
+                              TRUE ~ datetime_end),
+    dif = datetime_start-datetime_end
+  ) %>% 
+  #No longer needed, as we have the full clean set corrected.#Import the full clean set.  Merge with the corrected one
+  # odkend_time_activities = read_rds('Results/processed data/odkend_time_activities_processed.RDS') %>% 
+  # dplyr::left_join(odkend_time_activities_mm) #%>% #Newer version.
+  # dplyr::left_join(read_xlsx("~/Dropbox/Jacaranda Kenya/Data Analysis mnch/Results/processed data/odkend_time_activities_processed_mm.xlsx") #%>% #Old version
+  # dplyr::select(-description),
+  # by = c("KEY","survey_datetime_end","hhid","description")
   dplyr::select(-notes,-survey_datetime_end,-accurately_reported) %>% 
   dplyr::rename(activity = description) %>% 
   dplyr::mutate(activity_clean = 
-                  case_when(activity %like% "Visit|visit|teacher|friend|Greet|neighbo|relative|Shopping" ~ "Errands",
-                            activity %like% "Cyber|Sleeping|Resting|cyber|Repair" ~ "Errands",
+                  case_when(activity %like% "Visit|visit|teacher|friend|Greet|neighbo|relative|Shopping" ~ "Errands_out",
+                            activity %like% "Cyber|cyber|Repair|walk" ~ "Errands_out",
+                            activity %like% "Sleeping|None|Did_not|Resting|House|taking_food" ~ "Errands_home",
                             activity %like% "child|baby|taker|medicine|Chores" ~ "Childcare",
-                            activity %like% "walk|neighborhood|taking_food" ~ "Errands",
-                            activity %like% "Bank|Posho|report|House|Pay_rent|Meeting|Gh|Fetch|Chamas|bank" ~ "Errands",
-                            activity %like% "Did_not|None" ~ "Errands",
+                            activity %like% "walk|neighborhood" ~ "Errands_out",
+                            activity %like% "Bank|Posho|report|Pay_rent|Meeting|Gh|Fetch|Chamas|bank" ~ "Errands_out",
                             TRUE ~ activity))
 
 odkend_activities_tseries <- odkend_time_activities %>%
@@ -143,13 +167,14 @@ x_fun = function(lambda_delta,phi){lambda_delta*cos(phi)}
 all_merged = merge(pa_data, #data every other minute
                    gps_data, #data every minute.  Comes out to every other minute for the merged set.
                    by=c('local_time','hhid'),all.x = TRUE,all.y = FALSE) %>% 
-  dplyr::mutate(pa_file = basename(filename.x),
+  dplyr::mutate(hhid = gsub("AMBIENT","Ambient",hhid),
+                pa_file = basename(filename.x),
                 gps_file = basename(filename.y),
                 sampletype = ifelse(tolower(pa_file) %like% 'amb','ambient','personal'),
                 gps_filled = ifelse(is.na(lat),1,0)) %>% 
   dplyr::rename(pa_id = instrument_id.x,
                 gps_id = instrument_id.y) %>% 
-  dplyr::filter(!hhid %like% "AMBIENT") %>%
+  # dplyr::filter(!hhid %like% "AMBIENT") %>%
   dplyr::filter(!filename.x %like% "Pilot") %>%
   dplyr::filter(!is.na(local_time),!is.infinite(local_time)) %>% 
   # Fill in time series down for GPS - seems appropriate for most cases based on time series plot of gps data.
@@ -168,19 +193,35 @@ all_merged = merge(pa_data, #data every other minute
                 valid_pa = if_else(N<1080/2,0,1), #valid is 1, invalid is 0
                 region = case_when(filename.x %like% "Dagoretti" ~ "Dagoretti",
                                    TRUE ~ "Starehe"),
-                exposure_category = case_when(pm25_larpa_ave <= 10 ~ "Exposure<10",
-                                              pm25_larpa_ave > 10 & pm25_larpa_ave < 35 ~ "10<Exposure<35",
-                                              pm25_larpa_ave > 35 & pm25_larpa_ave < 100~ "Exposure>35",
+                exposure_category = case_when(pm25_bam_ave <= 10 ~ "Exposure<10",
+                                              pm25_bam_ave > 10 & pm25_bam_ave < 35 ~ "10<Exposure<35",
+                                              pm25_bam_ave > 35 & pm25_bam_ave < 100~ "Exposure>35",
                                               TRUE ~ "Exposure>100"),
                 exposure_category = factor(exposure_category,
                                            levels = c("Exposure<10","10<Exposure<35","Exposure>35","Exposure>100")))%>%
   dplyr::ungroup() %>% 
   dplyr::select(-lambda_delta,-phi,-x,-y,filesize_kb,-filename.y) %>% 
-  dplyr::filter(valid_pa == 1)
+  dplyr::filter(valid_pa == 1) %>% 
+  dplyr::left_join(odkstart %>% 
+                     dplyr::select(BAmbientStartB2location,hhid,BAmbientStartB1gpsLatitude,
+                                   BAmbientStartB1gpsLongitude,BAmbientStartB4PurpleAirID) %>% 
+                     dplyr::rename(pa_id = BAmbientStartB4PurpleAirID,
+                                   hhid_ambient = hhid),
+                   by = "pa_id") %>% 
+  dplyr::mutate(hhid = case_when(sampletype == "ambient" & !is.na(BAmbientStartB2location) ~ hhid_ambient,
+                                 TRUE ~ hhid),
+                lat = case_when(sampletype == "ambient" & !is.na(BAmbientStartB2location) ~ BAmbientStartB1gpsLatitude,
+                                TRUE ~ lat),
+                lon = case_when(sampletype == "ambient" & !is.na(BAmbientStartB2location) ~ BAmbientStartB1gpsLongitude,
+                                TRUE ~ lon),
+                region = case_when(hhid %like% "Dagoretti|Kabiro" ~ "Dagoretti",
+                                   hhid %like% "Kiboro|Kiamiako" ~ "Starehe",
+                                   TRUE ~ region))
 
 skimr::skim(all_merged)
 
-
+# View(all_merged %>% dplyr::filter(hhid %like% "Ambient"))
+# View(all_merged %>% dplyr::filter(pa_id %like% "11"))
 
 ```
 
@@ -197,21 +238,21 @@ skimr::skim(all_merged)
 summary_pa_deployment <- all_merged %>% 
   dplyr::group_by(sampletype, hhid,region) %>%
   dplyr::summarise(N_gps_samples = sum(!is.na(lat)), 
-                   N_pa_samples = sum(!is.na(pm25_larpa_ave)),
+                   N_pa_samples = sum(!is.na(pm25_bam_ave)),
                    N_hours = difftime(max(local_time,na.rm = T),
                                       min(local_time,na.rm = T),units = "hours"),
-                   Min_pm25 = min(pm25_larpa_ave,na.rm = TRUE), 
-                   Median_pm25 = median(pm25_larpa_ave,na.rm = TRUE),
-                   Mean_pm25 = mean(pm25_larpa_ave,na.rm = TRUE), 
-                   Max_pm25 = max(pm25_larpa_ave,na.rm = TRUE),
-                   SD_pm25 = sd(pm25_larpa_ave,na.rm = TRUE),
+                   Min_pm25 = min(pm25_bam_ave,na.rm = TRUE), 
+                   Median_pm25 = median(pm25_bam_ave,na.rm = TRUE),
+                   Mean_pm25 = mean(pm25_bam_ave,na.rm = TRUE), 
+                   Max_pm25 = max(pm25_bam_ave,na.rm = TRUE),
+                   SD_pm25 = sd(pm25_bam_ave,na.rm = TRUE),
                    Mode_lat = getmode(lat), 
                    Mode_lon = getmode(lon),
                    n_home = sum(home_flag == 1,na.rm = T),
                    n_away = sum(home_flag == 0,na.rm = T),
                    home_fraction = n_home/(n_home+n_away),
-                   Mean_home_pm25 = mean(pm25_larpa_ave[home_flag==1],na.rm = TRUE),
-                   Mean_away_pm25 = mean(pm25_larpa_ave[home_flag==0],na.rm = TRUE)) %>%
+                   Mean_home_pm25 = mean(pm25_bam_ave[home_flag==1],na.rm = TRUE),
+                   Mean_away_pm25 = mean(pm25_bam_ave[home_flag==0],na.rm = TRUE)) %>%
   dplyr::left_join(
     all_merged %>% 
       dplyr::select(pa_file,gps_file,pa_id,gps_id,hhid) %>% 
@@ -223,7 +264,7 @@ summary_pa_deployment <- all_merged %>%
 DT::datatable(summary_pa_deployment, caption = "PurpleAir Summary Table")
 
 summary_overall <- summary_pa_deployment %>% 
-  dplyr::group_by(sampletype) %>%
+  dplyr::group_by(sampletype,region) %>%
   dplyr::summarise(N = n(), 
                    Min_pm25 = min(Min_pm25,na.rm = TRUE), 
                    Median_pm25 = median(Median_pm25,na.rm = TRUE),
@@ -263,7 +304,7 @@ g_boxplot_distance <- summary_pa_deployment %>%
   geom_jitter(height = 0,width = 0.2,alpha = 0.25) +
   stat_summary(fun.data = give.n, geom = "text") +
   labs(y="Mean PM2.5 Concentration (ugm-3)",x="") +
-  theme(axis.text.x=element_text(angle=45)) +
+  theme(axis.text.x=element_text(angle=45,hjust= 1 ,vjust = 1)) +
   theme(legend.title = element_blank())
 g_boxplot_distance
 
@@ -277,7 +318,7 @@ g_boxplot <- ggplot(summary_pa_deployment,aes(x=sampletype, y = Mean_pm25)) +
   facet_grid(.~region) + 
   stat_summary(fun.data = give.n, geom = "text") +
   labs(y="Mean PM2.5 Concentration (ugm-3)",x="") +
-  theme(axis.text.x=element_text(angle=45)) +
+  theme(axis.text.x=element_text(angle=45,hjust= 1 ,vjust = 1)) +
   theme(legend.title = element_blank())
 g_boxplot
 
@@ -293,27 +334,28 @@ summary_by_activity <- all_merged %>%
                 transportation = if_else(is.na(transportation),"None",transportation)) %>% 
   dplyr::filter(!hhid == "Ambient") %>% 
   dplyr::mutate(activity_clean = 
-                  case_when(is.na(activity_clean) ~ "Other",
-                            activity_clean %like% "Chores|Working|Errands|Shopping|Bank|Childcare|Resting|Visiting|Sleeping" ~ "Errands",
-                            activity_clean %like% "None" ~ "Other",
+                  case_when(is.na(activity_clean) ~ "Errands_home",
+                            activity_clean %like% "Working|Errands|Shopping|Bank|Visiting" ~ "Errands_out",
+                            activity_clean %like% "Chores|Childcare|Resting|Sleeping" ~ "Errands_home",
+                            activity_clean %like% "None" ~ "Errands_home",
                             TRUE ~ activity_clean),
                 activity_clean = 
                   factor(activity_clean,
                          levels = c("Wood_stove", "Charcoal_stove",  
                                     "Kerosene_stove","LPG_stove","Cooking", "Incense", "Mosquito_coil", 
-                                    "Chores","Working","Errands","Shopping","Bank","Childcare","Resting",
+                                    "Chores","Working","Errands_out","Errands_home","Shopping","Bank","Childcare","Resting",
                                     "Visiting","Sleeping","None","Other"))) %>% 
   # add_count(activity_clean) %>%
   # mutate(activity_clean = if_else(n < 3, "other", activity_clean)) %>%
   # count(activity_clean) %>% 
   dplyr::group_by(sampletype, hhid,activity_clean,region) %>% 
   dplyr::summarise(N = n(), 
-                   Min_pm25 = min(pm25_larpa_ave,na.rm = TRUE), 
-                   Median_pm25 = median(pm25_larpa_ave,na.rm = TRUE),
-                   Mean_pm25 = mean(pm25_larpa_ave,na.rm = TRUE), 
-                   dose_pm25_ug = mean(pm25_larpa_ave,na.rm = TRUE)*N*2*0.006, # 6 liters per minute = 0.006m^3/minute
-                   Max_pm25 = max(pm25_larpa_ave,na.rm = TRUE),
-                   SD_pm25 = sd(pm25_larpa_ave,na.rm = TRUE))  
+                   Min_pm25 = min(pm25_bam_ave,na.rm = TRUE), 
+                   Median_pm25 = median(pm25_bam_ave,na.rm = TRUE),
+                   Mean_pm25 = mean(pm25_bam_ave,na.rm = TRUE), 
+                   dose_pm25_ug = mean(pm25_bam_ave,na.rm = TRUE)*N*2*0.006, # 6 liters per minute = 0.006m^3/minute
+                   Max_pm25 = max(pm25_bam_ave,na.rm = TRUE),
+                   SD_pm25 = sd(pm25_bam_ave,na.rm = TRUE))  
 
 DT::datatable(summary_by_activity, caption = "PurpleAir Summary Table by Activity")
 
@@ -326,7 +368,7 @@ g_activity_boxplot <- ggplot(summary_by_activity,aes(x=activity_clean, y = Mean_
   facet_grid(.~region) + 
   stat_summary(fun.data = give.n, geom = "text") +
   labs(y="Mean PM2.5 Concentration (ugm-3)",x="") +
-  theme(axis.text.x=element_text(angle=45)) +
+  theme(axis.text.x=element_text(angle=45,hjust= 1 ,vjust = 1)) +
   theme(legend.title = element_blank())
 g_activity_boxplot
 
@@ -347,9 +389,9 @@ g_activity_bars_dose <- summary_by_activity %>%
   dplyr::ungroup() %>% 
   ggplot(aes(fct_reorder(hhid,dose_pm25_ug),fill=activity_clean, y = dose_pm25_ug)) +
   geom_bar(position="fill", stat="identity") + 
-  facet_grid(.~region) + 
+  facet_grid(.~region,scales="free") + 
   labs(y="Percent of dose",x="") +
-  theme(axis.text.x=element_text(angle=45)) +
+  theme(axis.text.x=element_text(angle=45,hjust= 1 ,vjust = 1)) +
   scale_x_discrete(labels = NULL, breaks = NULL)
 g_activity_bars_dose
 
@@ -360,11 +402,11 @@ summary_by_transport <- all_merged %>%
   dplyr::filter(!hhid == "Ambient") %>% 
   dplyr::group_by(sampletype, hhid,transportation) %>% 
   dplyr::summarise(N = n(), 
-                   Min_pm25 = min(pm25_larpa_ave,na.rm = TRUE), 
-                   Median_pm25 = median(pm25_larpa_ave,na.rm = TRUE),
-                   Mean_pm25 = mean(pm25_larpa_ave,na.rm = TRUE), 
-                   Max_pm25 = max(pm25_larpa_ave,na.rm = TRUE),
-                   SD_pm25 = sd(pm25_larpa_ave,na.rm = TRUE))
+                   Min_pm25 = min(pm25_bam_ave,na.rm = TRUE), 
+                   Median_pm25 = median(pm25_bam_ave,na.rm = TRUE),
+                   Mean_pm25 = mean(pm25_bam_ave,na.rm = TRUE), 
+                   Max_pm25 = max(pm25_bam_ave,na.rm = TRUE),
+                   SD_pm25 = sd(pm25_bam_ave,na.rm = TRUE))
 DT::datatable(summary_by_transport, caption = "PurpleAir Summary Table by Transportation")
 
 g_transport_boxplot <- ggplot(summary_by_transport,aes(x=transportation, y = Mean_pm25)) +
@@ -375,7 +417,7 @@ g_transport_boxplot <- ggplot(summary_by_transport,aes(x=transportation, y = Mea
   # geom_jitter(height = 0,width = 0.2,alpha = 0.25) +
   stat_summary(fun.data = give.n, geom = "text") +
   labs(y="Mean PM2.5 Concentration (ugm-3)",x="") +
-  theme(axis.text.x=element_text(angle=45)) +
+  theme(axis.text.x=element_text(angle=45,hjust= 1 ,vjust = 1)) +
   theme(legend.title = element_blank())
 g_transport_boxplot
 
@@ -384,7 +426,7 @@ g_transport_boxplot
 g_timeofday_pa <- all_merged %>% 
   dplyr::mutate(time_of_daystr = strftime(local_time, format="%H:%M:%S",tz = local_tz),
                 time_of_day = as.POSIXct(time_of_daystr, format="%H:%M:%S",tz = local_tz))  %>% 
-  ggplot(aes(x=time_of_day, y = pm25_larpa_ave,color = sampletype)) +
+  ggplot(aes(x=time_of_day, y = pm25_bam_ave,color = sampletype)) +
   geom_smooth(alpha = 0.25) +
   # facet_grid(sampletype~.) + 
   labs(y="PM2.5 Concentration (ugm-3)",x="") +
@@ -392,6 +434,7 @@ g_timeofday_pa <- all_merged %>%
   theme(legend.title = element_blank()) + 
   geom_hline(aes(yintercept=10)) +
   facet_grid(region~.) + 
+  theme(axis.text.x=element_text(angle=45,hjust= 1 ,vjust = 1)) +
   geom_text(aes(min(time_of_day),11,label = "             WHO Guideline (10 µg/m3)",vjust = 2)) +
   geom_hline(aes(yintercept=35)) +
   geom_text(aes(min(time_of_day),36,label = "             WHO Interim-1 Target (35 µg/m3)",vjust = 2))
@@ -400,7 +443,7 @@ g_timeofday_pa
 #Plot stacked bar plots of exposures by individual
 
 g_categories_bars_exposure <- all_merged %>% 
-  ggplot(aes(x = hhid,fill=exposure_category, y = pm25_larpa_ave)) +
+  ggplot(aes(x = hhid,fill=exposure_category, y = pm25_bam_ave)) +
   geom_bar(position="fill", stat="identity") + 
   labs(y="Exposure category",x="") +
   scale_x_discrete(labels = NULL, breaks = NULL)
@@ -409,13 +452,13 @@ g_categories_bars_exposure
 #Plot stacked bar plots by time of day
 g_categories_bars_exposure <- all_merged %>% 
   dplyr::mutate(time_of_daystr = strftime(local_time, format="%H:%M:%S",tz = local_tz),
-                time_of_day = as.POSIXct(time_of_daystr, format="%H",tz = local_tz))  %>% 
+                time_of_day = with_tz(as.POSIXct(time_of_daystr, format="%H",tz = "UTC"),local_tz))  %>% 
   dplyr::group_by(time_of_day) %>% 
   dplyr::mutate(N = n()) %>% 
   ggplot(aes(x = time_of_day,fill=exposure_category, y = N)) +
   geom_bar(position="fill", stat="identity") + 
   labs(y="Fraction of samples",x="") +
-  scale_x_datetime(date_breaks = "3 hours") +
+  scale_x_datetime(date_breaks = "3 hours",labels = date_format("%H:%M")) +
   ggtitle("Fraction of samples by exposure category, by hour")
 g_categories_bars_exposure
 
@@ -443,12 +486,16 @@ pal <- colorNumeric(
 gg_ave <- leaflet() %>%
   addTiles() %>%  # use the default base map which is OpenStreetMap tiles
   # addProviderTiles(providers$Esri.WorldImagery) %>% #Test this baby out.
+  addScaleBar(position = c("topright", "bottomright", "bottomleft", "topleft"),
+              options = scaleBarOptions(maxWidth = 100,
+                                        metric = TRUE,
+                                        imperial = TRUE,
+                                        updateWhenIdle = TRUE)) %>% 
   addCircleMarkers(lng=summary_pa_deployment$Mode_lon, lat=summary_pa_deployment$Mode_lat,
                    popup=paste(summary_pa_deployment$hhid,', ',summary_pa_deployment$sampletype,', ', summary_pa_deployment$Mean_pm25),
-                   # fillColor = all_merged$pm25_larpa_ave
+                   # fillColor = all_merged$pm25_bam_ave
                    radius =  (summary_pa_deployment$Mean_pm25+10)/10,
-                   color = pal(summary_pa_deployment$Mean_pm25)
-  )
+                   color = pal(summary_pa_deployment$Mean_pm25))
 
 saveWidget(gg_ave, '~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/maps/ave_map_jacaranda.html', selfcontained = T)
 
@@ -458,21 +505,26 @@ saveWidget(gg_ave, '~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/maps/ave_m
 map_by_filedeployment <- function(all_merged,pal) {
   
   plot_name = paste0("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/maps/map_",all_merged$hhid[1],".html")
-  if(!file.exists(plot_name)){
-    
-    gg <- leaflet() %>%
-      addTiles() %>%  # use the default base map which is OpenStreetMap tiles
-      addProviderTiles(providers$Esri.WorldImagery) %>% #Test this baby out.
-      addCircles(lng=all_merged$lon,
-                 lat=all_merged$lat,
-                 popup=paste(all_merged$local_time.x,', ',
-                             all_merged$hhid,', ',all_merged$sampletype,', ', all_merged$pm25_larpa_ave),
-                 fillColor = pal(all_merged$pm25_larpa_ave),
-                 # radius =  (all_merged$pm25_larpa_ave+10)/10,
-                 color = pal(all_merged$pm25_larpa_ave)
-      )
-    saveWidget(gg, plot_name, selfcontained = T)
-  }
+  # if(!file.exists(plot_name)){
+  
+  gg <- leaflet() %>%
+    addTiles() %>%  # use the default base map which is OpenStreetMap tiles
+    addScaleBar(position = c("topright", "bottomright", "bottomleft", "topleft"),
+                options = scaleBarOptions(maxWidth = 100,
+                                          metric = TRUE,
+                                          imperial = TRUE,
+                                          updateWhenIdle = TRUE)) %>% 
+    addProviderTiles(providers$Esri.WorldImagery) %>% #Test this baby out.
+    addCircles(lng=all_merged$lon,
+               lat=all_merged$lat,
+               popup=paste(all_merged$local_time.x,', ',
+                           all_merged$hhid,', ',all_merged$sampletype,', ', all_merged$pm25_bam_ave),
+               fillColor = pal(all_merged$pm25_bam_ave),
+               # radius =  (all_merged$pm25_bam_ave+10)/10,
+               color = pal(all_merged$pm25_bam_ave)
+    )
+  saveWidget(gg, plot_name, selfcontained = T)
+  # }
 }
 
 #Map for each deployment
@@ -496,26 +548,49 @@ all_merged_geoave <- all_merged %>%
          lat.group = cut(lat, breaks = seq(floor(min(all_merged$lat,na.rm=T)), ceiling(max(all_merged$lat,na.rm=T)), by = 1e-3),
                          labels = seq(floor(min(all_merged$lat,na.rm=T)) + 1e-3, ceiling(max(all_merged$lat,na.rm=T)), by = 1e-3))) %>%
   group_by(lon.group, lat.group) %>%
-  summarise(pm25_larpa_geoave = mean(pm25_larpa_ave), 
-            pm25_larpa_sd = sd(pm25_larpa_ave,na.rm=T), .groups = "drop") %>%
+  summarise(pm25_bam_geoave = mean(pm25_bam_ave), 
+            pm25_bam_sd = sd(pm25_bam_ave,na.rm=T), .groups = "drop") %>%
   mutate(across(where(is.factor), ~as.numeric(as.character(.x))),
-         pm25_larpa_sd = ifelse(is.na(pm25_larpa_sd),10,pm25_larpa_sd))
-
-plot_name = paste0("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/maps/map_grid_ave.html")
+         pm25_bam_sd = ifelse(is.na(pm25_bam_sd),10,pm25_bam_sd))
 
 pal2 <- colorNumeric(
   palette = colorRampPalette(c('green', 'yellow','red'))(20),
   domain = c(0,100))
 
+plot_name = paste0("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/maps/map_grid_ave.html")
+
 gg <- leaflet() %>%
   addTiles() %>%  # use the default base map which is OpenStreetMap tiles
   addProviderTiles(providers$Esri.WorldImagery) %>% #Test this baby out.
+  addScaleBar(position = c("topright", "bottomright", "bottomleft", "topleft"),
+              options = scaleBarOptions(maxWidth = 100,
+                                        metric = TRUE,
+                                        imperial = TRUE,
+                                        updateWhenIdle = TRUE)) %>% 
   addCircles(lng=all_merged_geoave$lon.group,
              lat=all_merged_geoave$lat.group,
-             popup=paste0("pm2.5: ",round(all_merged_geoave$pm25_larpa_geoave,1),"µg/m3"),
-             fillColor = pal2(all_merged_geoave$pm25_larpa_geoave),
-             radius =  (all_merged_geoave$pm25_larpa_sd+100)/10,
-             color = pal2(all_merged_geoave$pm25_larpa_geoave)
+             popup=paste0("pm2.5: ",round(all_merged_geoave$pm25_bam_geoave,1),"µg/m3"),
+             fillColor = pal2(all_merged_geoave$pm25_bam_geoave),
+             radius =  (all_merged_geoave$pm25_bam_sd+100)/10,
+             color = pal2(all_merged_geoave$pm25_bam_geoave)
+  )
+saveWidget(gg, plot_name, selfcontained = T)
+
+plot_name = paste0("~/Dropbox/Jacaranda Kenya Field Folder/Data/Plots/maps/map_grid_ave_streets.html")
+
+gg <- leaflet() %>%
+  addTiles() %>%  # use the default base map which is OpenStreetMap tiles
+  addScaleBar(position = c("topright", "bottomright", "bottomleft", "topleft"),
+              options = scaleBarOptions(maxWidth = 100,
+                                        metric = TRUE,
+                                        imperial = TRUE,
+                                        updateWhenIdle = TRUE)) %>% 
+  addCircles(lng=all_merged_geoave$lon.group,
+             lat=all_merged_geoave$lat.group,
+             popup=paste0("pm2.5: ",round(all_merged_geoave$pm25_bam_geoave,1),"µg/m3"),
+             fillColor = pal2(all_merged_geoave$pm25_bam_geoave),
+             radius =  (all_merged_geoave$pm25_bam_sd+100)/10,
+             color = pal2(all_merged_geoave$pm25_bam_geoave)
   )
 saveWidget(gg, plot_name, selfcontained = T)
 
@@ -538,6 +613,33 @@ all_merged %>%
   dplyr::group_by(hhid) %>%
   dplyr::do(f = plot_by_filedeployment(.,pa_ambient))
 
+#Map for all deployments together.  It's kind of a clusterfuck:
+pa_ambient %>%
+  dplyr::do(a=map_by_filedeployment(.,pal))
+
+
+
+g_boxplot <- ggplot(pa_ambient,aes(x=hhid, y = pm25_bam_ave)) +
+  geom_boxplot(alpha = 0.25,outlier.shape = NA) +
+  geom_jitter(height = 0,width = 0.05,alpha = 0.01) +
+  facet_grid(.~region,scales="free") + 
+  ylim(0,100) + 
+  stat_summary(fun.data = give.n, geom = "text") +
+  labs(y="Mean PM2.5 Concentration (ugm-3)",x="") +
+  stat_summary(fun.y=mean, colour="blue", geom="point",
+               shape=18, size=4.5,alpha = 0.85)+
+  stat_summary(fun.data = give.mean5, geom = "text",colour="blue") +
+  theme(axis.text.x=element_text(angle=45,hjust= 1 ,vjust = 1)) +
+  theme(legend.title = element_blank())
+g_boxplot
+
+g_boxplot <- ggplot(pa_ambient,aes(x=local_time, y = pm25_bam_ave,color = hhid)) +
+  geom_line(alpha = 0.5) +
+  facet_grid(.~region) +
+  labs(y="PM2.5 Concentration (ugm-3)",x="") +
+  # theme(axis.text.x=element_text(angle=45,hjust= 1 ,vjust = 1)) +
+  theme(legend.title = element_blank())
+g_boxplot
 
 ```
 
@@ -629,7 +731,7 @@ summary(hotstepper)
 modeldata_continuous <- modeldata %>%  dplyr::select(Mean_pm25 ,tobacco_exp_freq,
                                                      insideoutsidecooking,#tobacco_freq,
                                                      tobacco_exp_freq,Charcoal_stove,Cooking,#D8_lightingtype
-                                                     Errands,Incense,Kerosene_stove,   LPG_stove,#Mosquito_coil,       
+                                                     Errands_home,Errands_out,Incense,Kerosene_stove,   LPG_stove,#Mosquito_coil,       
                                                      Wood_stove,Working) %>% 
   # dplyr::mutate(Mean_pm25log = log(Mean_pm25)) %>% 
   replace(is.na(.), 0)
@@ -642,7 +744,7 @@ modeldata_continuous <- modeldata %>%  dplyr::select(Mean_pm25 ,tobacco_exp_freq
 
 fitcont <- lm(Mean_pm25 ~ insideoutsidecooking +
                 tobacco_exp_freq+Charcoal_stove+Cooking+#D8_lightingtype
-                Errands+Incense+Kerosene_stove+LPG_stove+#Mosquito_coil+       
+                Errands_home+Errands_out+Incense+Kerosene_stove+LPG_stove+#Mosquito_coil+       
                 Wood_stove+Working,
               data=modeldata_continuous)
 
@@ -667,6 +769,7 @@ summary(fit_transportation)
 plot(fit_transportation)
 
 ```
+
 
 # Activity and transport plots (no PA data, this is just the time segments.)
 ```{r activity_plots}
@@ -697,6 +800,7 @@ while (!is.null(dev.list()))  dev.off()
 as.data.frame(all_merged) %>%
   dplyr::group_by(hhid) %>%
   dplyr::do(f=plot_pa_with_activities(.,odkend_transport_processed_mm,odkend_time_activities))
+
 ```
 
 

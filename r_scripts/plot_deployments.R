@@ -63,7 +63,7 @@ plot_files <- function(pa_data_temp){
 # pa_data_temp <- all_merged[1:1000,]
 plot_pa_with_activities <- function(pa_data_temp,odkend_transport_processed_mm,odkend_time_activities){
   
-  odkend_time_activities_temp <- odkend_time_activities   %>%
+  odkend_time_activities_temp <- odkend_time_activities %>%
     dplyr::filter(hhid == pa_data_temp$hhid[1]) %>% 
     distinct()
   
@@ -83,7 +83,7 @@ plot_pa_with_activities <- function(pa_data_temp,odkend_transport_processed_mm,o
     
     p2 <- odkend_time_activities_temp %>% 
       ggplot() +  
-      geom_dumbbell(aes(y=description, x=datetime_start, xend=datetime_end),
+      geom_dumbbell(aes(y=activity_clean, x=datetime_start, xend=datetime_end),
                     size=1.5, color="#b2b2b2", size_x=3, size_xend = 3) + 
       xlim(c(min(pa_data_temp$local_time,na.rm = T),
              max(pa_data_temp$local_time,na.rm = T)))+
@@ -374,8 +374,10 @@ plot_deployment_merged <- function(all_merged_temp){
 }
 
 give.n <- function(x){return(c(y = 0, label = length(x)))}
+give.n5 <- function(x){return(c(y = 5, label = length(x)))}
 
 give.mean <- function(x){return(c(y =mean(x)+.1, label = round(mean(x),digits=1)))}
+give.mean5 <- function(x){return(c(y =mean(x)+5, label = round(mean(x),digits=1)))}
 
 #To make box and whiskers quantiles rather than IQRs.
 f <- function(x) {
@@ -395,15 +397,17 @@ plot_by_filedeployment <- function(pa_data_temp,pa_ambient) {
         ggplot() +
         geom_point(aes(x=local_time, y=pm25_larpa_ave),alpha = .2) +
         # geom_smooth(aes(x=local_time, y=pm25_larpa_ave),alpha = .2) +
-        labs(title = paste0("PA for household: ",pa_data_temp$hhid[1]))
+        labs(title = paste0("PA for household: ",pa_data_temp$hhid[1]))+
+        xlim(min(pa_data_temp$local_time),max(pa_data_temp$local_time))
       
       p2 = pa_ambient %>% 
         dplyr::filter(local_time > min(pa_data_temp$local_time,na.rm = T),
                       local_time < max(pa_data_temp$local_time,na.rm = T)) %>%
         ggplot() +
         geom_point(aes(x=local_time, y=pm25_larpa_ave),alpha = .2) +
-        geom_line(aes(x=local_time, y=current_temp_f),alpha = .2) +
-        labs(title = "Ambient")
+        # geom_line(aes(x=local_time, y=current_temp_f),alpha = .2) +
+        labs(title = "Ambient")+
+        xlim(min(pa_data_temp$local_time),max(pa_data_temp$local_time))
       
       
       egg::ggarrange(p1, p2, heights = c(0.5,0.5))

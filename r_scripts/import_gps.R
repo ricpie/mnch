@@ -43,7 +43,7 @@ import_gps_fun <-function(x){
 # process string
 # str_extract(data, regexp)
 
-gps_data <- ldply(gps_paths,import_gps_fun,.parallel = TRUE) %>%
+gps_data <- ldply(gps_paths,import_gps_fun,.parallel = FALSE,.progress = "text") %>%
   dplyr::bind_rows() %>%
   dplyr::mutate(lat = as.numeric(gsub("N|S","",`LATITUDE N/S`)),
                 lat = case_when(`LATITUDE N/S` %like% 'S' ~ -lat,

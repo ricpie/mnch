@@ -115,7 +115,7 @@ my_breaks = seq(floor_date(min(pa_data$UTCDateTime,na.rm=TRUE),'minutes'),
                 floor_date(max(pa_data$UTCDateTime,na.rm=TRUE),'minutes'),
                 by = rollup_pm)
 pa_data[,UTCDateTime := as.POSIXct(cut(UTCDateTime, breaks=my_breaks), tz = "UTC")]
-setnames(pa_data, "instrument_id.x", "instrument_id")
+setnames(pa_data, "instrument_id.y", "instrument_id")
 
 
 #Calculate minute averages of key variables, grouped by relevant metadata
@@ -134,9 +134,15 @@ pa_data[,local_time := with_tz(UTCDateTime,tzone = "Africa/Nairobi")]
 
 
 ######Calculate concentrations
-pa_data$pm25_larpa_ave = 0.778 * pa_data$pm2_5_cf_1_ave + 2.65
+pa_data[,pm25_larpa_ave := 0.778 * pm2_5_cf_1_ave + 2.65]
+pa_data[,pm25_bam_ave := 0.58 * pm2_5_cf_1_ave - 0.065*current_humidity + 9.7157]
+# The calibration equation is: PM2.5 = a*(average of PM2.5 channels) + b*(RH) + c 
+# where 
+# a = 0.58 
+# b = -0.065 
+# c = 9.7157 
 
-pa_data[,c("firmware_ver","pm10_0_cf_1","pm2_5_cf_1","pm10_0_cf_1_b","pm2_5_cf_1_b","pm2_5_cf_1_ave","UTCDateTime") := NULL]
+pa_data[,c("firmware_ver","pm10_0_cf_1","pm2_5_cf_1","pm10_0_cf_1_b","pm2_5_cf_1_b","UTCDateTime") := NULL]
 
 saveRDS(pa_data,"Results/processed data/pa_data.rds")
 
