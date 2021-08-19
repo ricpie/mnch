@@ -20,8 +20,8 @@ output:
 email = 0
 timezone = 'GMT'
 local_tz = 'Africa/Nairobi'
-home_threshold_meters = 10 #meters
-reimport = TRUE #Set to true if we have new GPS or PA data.
+home_threshold_meters = 100 #meters
+reimport = FALSE #Set to true if we have new GPS or PA data.
 
 
 source('r_scripts/load.R')
@@ -41,7 +41,7 @@ knitr::opts_chunk$set(fig.path='../Results/figures/', warning=FALSE, message=FAL
 
 # Import GPS, PA, ODK data
 
-```{r load_merge,cache=TRUE,echo = FALSE,include=FALSE}
+```{r load_merge,cache=FALSE,echo = FALSE,include=FALSE}
 source('r_scripts/import_odk.R')
 
 if(reimport==TRUE){
@@ -118,22 +118,23 @@ odkend_time_activities <- read_xlsx("~/Dropbox/Jacaranda Kenya/Data Analysis mnc
   dplyr::select(-notes,-survey_datetime_end,-accurately_reported) %>% 
   dplyr::rename(activity = description) %>% 
   dplyr::mutate(activity_clean = 
-                  case_when(activity %like% "Visit|visit|teacher|friend|Greet|neighbo|relative|Shopping" ~ "Errands_out",
-                            activity %like% "Cyber|cyber|Repair|walk" ~ "Errands_out",
+                  case_when(activity %like% "Cyber|cyber|Repair|Visit|visit|teacher|friend|Greet|neighbo|relative" ~ "Errands_out",
+                            activity %like% "walk|Walk|Shopping|neighborhood|Fetch|Chamas|bank|Bank|Pay_rent" ~ "Errands_out",
                             activity %like% "Sleeping|None|Did_not|Resting|House|taking_food" ~ "Errands_home",
                             activity %like% "child|baby|taker|medicine|Chores" ~ "Childcare",
-                            activity %like% "walk|neighborhood" ~ "Errands_out",
-                            activity %like% "Bank|Posho|report|Pay_rent|Meeting|Gh|Fetch|Chamas|bank" ~ "Errands_out",
-                            TRUE ~ activity))
+                            activity %like% "Posho|report|Meeting|Gh" ~ "Errands_out",
+                            TRUE ~ activity),
+                activity_clean_source = paste0(activity_clean,"_",smoke_sources),
+                activity_clean_source = gsub("_NA","",activity_clean_source))
 
 odkend_activities_tseries <- odkend_time_activities %>%
-  dplyr::select(datetime_end,datetime_start,activity_clean,hhid) %>% 
+  dplyr::select(datetime_end,datetime_start,activity_clean,hhid,activity_clean_source,smoke_sources) %>% 
   rowid_to_column() %>%
-  gather(var, datetime, -activity_clean,-hhid,-rowid) %>%
+  gather(var, datetime, -activity_clean,-hhid,-rowid,-activity_clean_source,-smoke_sources) %>%
   distinct() %>%
   dplyr::group_by(rowid)  %>% 
   tidyr::complete(datetime=seq(min(datetime,na.rm=T), max(datetime,na.rm=T), by = "1 min")) %>% 
-  fill(activity_clean,hhid) %>% 
+  fill(activity_clean,activity_clean_source,smoke_sources,hhid) %>% 
   dplyr::ungroup() %>% 
   select(-var,-rowid) 
 
@@ -143,6 +144,13 @@ odkend_time_activities_wide <-  odkend_time_activities %>%
   dplyr::ungroup() %>% 
   dplyr::mutate(time_hours = if_else(as.numeric(time_hours)<0,0,as.numeric(time_hours))) %>% 
   tidyr::pivot_wider(names_from = c("activity_clean"),values_from = "time_hours")
+
+odkend_time_activities_wide_sources <-  odkend_time_activities %>% 
+  dplyr::group_by(smoke_sources, hhid) %>% 
+  dplyr::summarise(time_hours = sum(difftime(datetime_end,datetime_start,units="hours"))) %>% 
+  dplyr::ungroup() %>% 
+  dplyr::mutate(time_hours = if_else(as.numeric(time_hours)<0,0,as.numeric(time_hours))) %>% 
+  tidyr::pivot_wider(names_from = c("smoke_sources"),values_from = "time_hours")
 
 odk_activity_transpo_tseries <- odkend_activities_tseries %>% 
   dplyr::full_join(odkend_transport_tseries, by = c("hhid","datetime")) %>% 
@@ -174,7 +182,6 @@ all_merged = merge(pa_data, #data every other minute
                 gps_filled = ifelse(is.na(lat),1,0)) %>% 
   dplyr::rename(pa_id = instrument_id.x,
                 gps_id = instrument_id.y) %>% 
-  # dplyr::filter(!hhid %like% "AMBIENT") %>%
   dplyr::filter(!filename.x %like% "Pilot") %>%
   dplyr::filter(!is.na(local_time),!is.infinite(local_time)) %>% 
   # Fill in time series down for GPS - seems appropriate for most cases based on time series plot of gps data.
@@ -182,33 +189,33 @@ all_merged = merge(pa_data, #data every other minute
   fill(lat, .direction = "down") %>% 
   fill(lon, .direction = "down") %>% 
   dplyr::mutate(N = n(),
-                Mode_lat = getmode(lat),
-                Mode_lon = getmode(lon),
+                Mode_lat = median(lat,na.rm = T),
+                Mode_lon = median(lon,na.rm = T),
                 phi = phi_fun(lat),
                 lambda_delta = lambda_delta_fun(lon,Mode_lon),
                 x = x_fun(lambda_delta,phi),
                 y = phi_delta(lat,Mode_lat),
                 d_meters = R * sqrt(x^2 + y^2),
                 home_flag = ifelse(d_meters < home_threshold_meters,1,0),
-                valid_pa = if_else(N<1080/2,0,1), #valid is 1, invalid is 0
+                valid_pa = if_else(N<1080/2,0,1), #valid is 1, invalid is 0.  Corresponds to 18 hours
                 region = case_when(filename.x %like% "Dagoretti" ~ "Dagoretti",
                                    TRUE ~ "Starehe"),
                 exposure_category = case_when(pm25_bam_ave <= 10 ~ "Exposure<10",
                                               pm25_bam_ave > 10 & pm25_bam_ave < 35 ~ "10<Exposure<35",
-                                              pm25_bam_ave > 35 & pm25_bam_ave < 100~ "Exposure>35",
+                                              pm25_bam_ave > 35 & pm25_bam_ave < 100 ~ "Exposure>35",
                                               TRUE ~ "Exposure>100"),
                 exposure_category = factor(exposure_category,
                                            levels = c("Exposure<10","10<Exposure<35","Exposure>35","Exposure>100")))%>%
   dplyr::ungroup() %>% 
   dplyr::select(-lambda_delta,-phi,-x,-y,filesize_kb,-filename.y) %>% 
-  dplyr::filter(valid_pa == 1) %>% 
   dplyr::left_join(odkstart %>% 
                      dplyr::select(BAmbientStartB2location,hhid,BAmbientStartB1gpsLatitude,
                                    BAmbientStartB1gpsLongitude,BAmbientStartB4PurpleAirID) %>% 
                      dplyr::rename(pa_id = BAmbientStartB4PurpleAirID,
                                    hhid_ambient = hhid),
                    by = "pa_id") %>% 
-  dplyr::mutate(hhid = case_when(sampletype == "ambient" & !is.na(BAmbientStartB2location) ~ hhid_ambient,
+  dplyr::mutate(hhid_ambient = paste0(hhid_ambient,"_",as.Date(local_time)),
+                hhid = case_when(sampletype == "ambient" & !is.na(BAmbientStartB2location) ~ hhid_ambient,
                                  TRUE ~ hhid),
                 lat = case_when(sampletype == "ambient" & !is.na(BAmbientStartB2location) ~ BAmbientStartB1gpsLatitude,
                                 TRUE ~ lat),
@@ -216,7 +223,14 @@ all_merged = merge(pa_data, #data every other minute
                                 TRUE ~ lon),
                 region = case_when(hhid %like% "Dagoretti|Kabiro" ~ "Dagoretti",
                                    hhid %like% "Kiboro|Kiamiako" ~ "Starehe",
-                                   TRUE ~ region))
+                                   TRUE ~ region)) %>% 
+  dplyr::group_by(sampletype, hhid) %>%
+  dplyr::mutate(N = n(),
+                valid_pa = if_else(N<1080/2,0,1)) %>%  #valid is 1, invalid is 0.  Corresponds to 18 hours
+  dplyr::filter(valid_pa == 1) %>% 
+  dplyr::ungroup()
+
+
 
 skimr::skim(all_merged)
 
@@ -234,7 +248,6 @@ skimr::skim(all_merged)
 
 ```{r summarize_data,echo = FALSE}
 
-
 summary_pa_deployment <- all_merged %>% 
   dplyr::group_by(sampletype, hhid,region) %>%
   dplyr::summarise(N_gps_samples = sum(!is.na(lat)), 
@@ -246,8 +259,8 @@ summary_pa_deployment <- all_merged %>%
                    Mean_pm25 = mean(pm25_bam_ave,na.rm = TRUE), 
                    Max_pm25 = max(pm25_bam_ave,na.rm = TRUE),
                    SD_pm25 = sd(pm25_bam_ave,na.rm = TRUE),
-                   Mode_lat = getmode(lat), 
-                   Mode_lon = getmode(lon),
+                   Mode_lat = median(lat,na.rm = T), 
+                   Mode_lon = median(lon,na.rm = T),
                    n_home = sum(home_flag == 1,na.rm = T),
                    n_away = sum(home_flag == 0,na.rm = T),
                    home_fraction = n_home/(n_home+n_away),
@@ -266,6 +279,7 @@ DT::datatable(summary_pa_deployment, caption = "PurpleAir Summary Table")
 summary_overall <- summary_pa_deployment %>% 
   dplyr::group_by(sampletype,region) %>%
   dplyr::summarise(N = n(), 
+                   N_greater_WHO_35 = sum(Mean_pm25>35,na.rm = TRUE),
                    Min_pm25 = min(Min_pm25,na.rm = TRUE), 
                    Median_pm25 = median(Median_pm25,na.rm = TRUE),
                    Mean_pm25 = mean(Mean_pm25,na.rm = TRUE), 
@@ -273,7 +287,20 @@ summary_overall <- summary_pa_deployment %>%
                    SD_pm25 = sd(SD_pm25,na.rm = TRUE),
                    Mean_home_pm25 = mean(Mean_home_pm25,na.rm = TRUE),
                    Mean_away_pm25 = mean(Mean_away_pm25,na.rm = TRUE))
-DT::datatable(summary_overall, caption = "PurpleAir Overall Summary Table")
+kable(summary_overall, caption = "PurpleAir Overall Summary Table by District","pipe",digits = 1)
+
+summary_overall_overall <- summary_pa_deployment %>% 
+  dplyr::group_by(sampletype) %>%
+  dplyr::summarise(N = n(), 
+                   N_greater_WHO_35 = sum(Mean_pm25>35,na.rm = TRUE),
+                   Min_pm25 = min(Min_pm25,na.rm = TRUE), 
+                   Median_pm25 = median(Median_pm25,na.rm = TRUE),
+                   Mean_pm25 = mean(Mean_pm25,na.rm = TRUE), 
+                   Max_pm25 = max(Max_pm25,na.rm = TRUE),
+                   SD_pm25 = sd(SD_pm25,na.rm = TRUE),
+                   Mean_home_pm25 = mean(Mean_home_pm25,na.rm = TRUE),
+                   Mean_away_pm25 = mean(Mean_away_pm25,na.rm = TRUE))
+kable(summary_overall_overall, caption = "PurpleAir Overall Summary Table","pipe",digits = 1)
 
 
 ```
@@ -300,7 +327,7 @@ g_boxplot_distance <- summary_pa_deployment %>%
   geom_boxplot(alpha = 0.25,outlier.shape = NA) +
   stat_summary(fun.y=mean, colour="blue", geom="point",
                shape=18, size=4.5,alpha = 0.5)+
-  stat_summary(fun.data = give.mean, geom = "text",colour="blue") +
+  stat_summary(fun.data = give.mean10, geom = "text",colour="blue") +
   geom_jitter(height = 0,width = 0.2,alpha = 0.25) +
   stat_summary(fun.data = give.n, geom = "text") +
   labs(y="Mean PM2.5 Concentration (ugm-3)",x="") +
@@ -313,7 +340,7 @@ g_boxplot <- ggplot(summary_pa_deployment,aes(x=sampletype, y = Mean_pm25)) +
   geom_boxplot(alpha = 0.25,outlier.shape = NA) +
   stat_summary(fun.y=mean, colour="blue", geom="point",
                shape=18, size=4.5,alpha = 0.5)+
-  stat_summary(fun.data = give.mean, geom = "text",colour="blue") +
+  stat_summary(fun.data = give.mean10, geom = "text",colour="blue") +
   geom_jitter(height = 0,width = 0.2,alpha = 0.25) +
   facet_grid(.~region) + 
   stat_summary(fun.data = give.n, geom = "text") +
@@ -328,26 +355,29 @@ summary_wide <- tidyr::pivot_wider(summary_pa_deployment,
                                    values_from = c('Mean_pm25','N_gps_samples'))
 
 
-summary_by_activity <- all_merged %>% 
+summary_by_activity_temp <- all_merged %>% 
   dplyr::left_join(odk_activity_transpo_tseries) %>% 
   dplyr::mutate(activity_clean = if_else(is.na(activity_clean),"None",activity_clean),
                 transportation = if_else(is.na(transportation),"None",transportation)) %>% 
   dplyr::filter(!hhid == "Ambient") %>% 
   dplyr::mutate(activity_clean = 
                   case_when(is.na(activity_clean) ~ "Errands_home",
-                            activity_clean %like% "Working|Errands|Shopping|Bank|Visiting" ~ "Errands_out",
-                            activity_clean %like% "Chores|Childcare|Resting|Sleeping" ~ "Errands_home",
+                            activity_clean %like% "Childcare" ~ "Childcare",
+                            activity_clean %like% "Working|Errands|Shopping|Bank|Visiting|Errands_out" ~ "Errands_out",
+                            activity_clean %like% "Chores|Childcare|Resting|Sleeping|Errands_home" ~ "Errands_home",
                             activity_clean %like% "None" ~ "Errands_home",
                             TRUE ~ activity_clean),
                 activity_clean = 
                   factor(activity_clean,
-                         levels = c("Wood_stove", "Charcoal_stove",  
-                                    "Kerosene_stove","LPG_stove","Cooking", "Incense", "Mosquito_coil", 
-                                    "Chores","Working","Errands_out","Errands_home","Shopping","Bank","Childcare","Resting",
-                                    "Visiting","Sleeping","None","Other"))) %>% 
-  # add_count(activity_clean) %>%
-  # mutate(activity_clean = if_else(n < 3, "other", activity_clean)) %>%
-  # count(activity_clean) %>% 
+                         levels = c("Errands_home","Errands_out","LPG_stove","Wood_stove", "Charcoal_stove",  
+                                    "Kerosene_stove","Cooking", "Incense", "Mosquito_coil", 
+                                    "Chores","Working","Shopping","Bank","Childcare","Resting",
+                                    "Visiting","Sleeping","None","Other")))
+# add_count(activity_clean) %>%
+# mutate(activity_clean = if_else(n < 3, "other", activity_clean)) %>%
+# count(activity_clean) %>% 
+
+summary_by_activity <- summary_by_activity_temp %>% 
   dplyr::group_by(sampletype, hhid,activity_clean,region) %>% 
   dplyr::summarise(N = n(), 
                    Min_pm25 = min(pm25_bam_ave,na.rm = TRUE), 
@@ -363,14 +393,41 @@ g_activity_boxplot <- ggplot(summary_by_activity,aes(x=activity_clean, y = Mean_
   geom_boxplot(alpha = 0.25,outlier.shape = NA) +
   stat_summary(fun.y=mean, colour="blue", geom="point",
                shape=18, size=4.5,alpha = 0.5)+
-  stat_summary(fun.data = give.mean, geom = "text",colour="blue") +
+  stat_summary(fun.data = give.mean10, geom = "text",colour="blue") +
   geom_jitter(height = 0,width = 0.2,alpha = 0.25) +
-  facet_grid(.~region) + 
   stat_summary(fun.data = give.n, geom = "text") +
   labs(y="Mean PM2.5 Concentration (ugm-3)",x="") +
   theme(axis.text.x=element_text(angle=45,hjust= 1 ,vjust = 1)) +
   theme(legend.title = element_blank())
 g_activity_boxplot
+
+g_activity_boxplot_district <- g_activity_boxplot +
+    facet_grid(.~region) 
+g_activity_boxplot_district
+
+summary_by_activity_source <- summary_by_activity_temp %>% 
+  dplyr::group_by(sampletype, hhid,smoke_sources,region) %>% 
+  dplyr::summarise(N = n(), 
+                   Min_pm25 = min(pm25_bam_ave,na.rm = TRUE), 
+                   Median_pm25 = median(pm25_bam_ave,na.rm = TRUE),
+                   Mean_pm25 = mean(pm25_bam_ave,na.rm = TRUE), 
+                   dose_pm25_ug = mean(pm25_bam_ave,na.rm = TRUE)*N*2*0.006, # 6 liters per minute = 0.006m^3/minute
+                   Max_pm25 = max(pm25_bam_ave,na.rm = TRUE),
+                   SD_pm25 = sd(pm25_bam_ave,na.rm = TRUE))  
+
+g_activity_boxplot_sources <- ggplot(summary_by_activity_source,aes(x=smoke_sources, y = Mean_pm25)) +
+  geom_boxplot(alpha = 0.25,outlier.shape = NA) +
+  stat_summary(fun.y=mean, colour="blue", geom="point",
+               shape=18, size=4.5,alpha = 0.5)+
+  stat_summary(fun.data = give.mean10, geom = "text",colour="blue") +
+  geom_jitter(height = 0,width = 0.2,alpha = 0.25) +
+  # facet_grid(.~region) + 
+  stat_summary(fun.data = give.n, geom = "text") +
+  labs(y="Mean PM2.5 Concentration (ugm-3)",x="") +
+  theme(axis.text.x=element_text(angle=45,hjust= 1 ,vjust = 1)) +
+  theme(legend.title = element_blank())+
+  ggtitle("Sources participants smelled during activities")
+g_activity_boxplot_sources
 
 # Doesn't make a whole lot of sense. 
 # g_activity_bars_conc <- summary_by_activity %>% 
@@ -413,10 +470,11 @@ g_transport_boxplot <- ggplot(summary_by_transport,aes(x=transportation, y = Mea
   geom_boxplot(alpha = 0.25,outlier.shape = NA) +
   stat_summary(fun.y=mean, colour="blue", geom="point",
                shape=18, size=4.5,alpha = 0.5)+
-  stat_summary(fun.data = give.mean, geom = "text",colour="blue") +
-  # geom_jitter(height = 0,width = 0.2,alpha = 0.25) +
+  stat_summary(fun.data = give.mean10, geom = "text",colour="blue") +
+  geom_jitter(height = 0,width = 0.2,alpha = 0.25) +
   stat_summary(fun.data = give.n, geom = "text") +
   labs(y="Mean PM2.5 Concentration (ugm-3)",x="") +
+  ylim(0,100) + 
   theme(axis.text.x=element_text(angle=45,hjust= 1 ,vjust = 1)) +
   theme(legend.title = element_blank())
 g_transport_boxplot
@@ -426,18 +484,19 @@ g_transport_boxplot
 g_timeofday_pa <- all_merged %>% 
   dplyr::mutate(time_of_daystr = strftime(local_time, format="%H:%M:%S",tz = local_tz),
                 time_of_day = as.POSIXct(time_of_daystr, format="%H:%M:%S",tz = local_tz))  %>% 
-  ggplot(aes(x=time_of_day, y = pm25_bam_ave,color = sampletype)) +
+  ggplot(aes(x=time_of_day, y = pm25_bam_ave,color = sampletype,shape = as.factor(home_flag))) +
   geom_smooth(alpha = 0.25) +
   # facet_grid(sampletype~.) + 
-  labs(y="PM2.5 Concentration (ugm-3)",x="") +
-  scale_x_datetime(date_breaks = "3 hours") +
+  labs(y="PM2.5 Concentration (ugm-3)",x="Households") +
+  scale_x_datetime(date_breaks = "3 hours",date_labels = "%H:%M") +
   theme(legend.title = element_blank()) + 
   geom_hline(aes(yintercept=10)) +
   facet_grid(region~.) + 
+  ylim(0,75)+
   theme(axis.text.x=element_text(angle=45,hjust= 1 ,vjust = 1)) +
-  geom_text(aes(min(time_of_day),11,label = "             WHO Guideline (10 µg/m3)",vjust = 2)) +
+  geom_text(aes(min(time_of_day),15,label = "WHO Guideline (10 µg/m3)",hjust = 0)) +
   geom_hline(aes(yintercept=35)) +
-  geom_text(aes(min(time_of_day),36,label = "             WHO Interim-1 Target (35 µg/m3)",vjust = 2))
+  geom_text(aes(min(time_of_day),40,label = "WHO Interim-1 Target (35 µg/m3)",hjust = 0))
 g_timeofday_pa
 
 #Plot stacked bar plots of exposures by individual
@@ -445,7 +504,7 @@ g_timeofday_pa
 g_categories_bars_exposure <- all_merged %>% 
   ggplot(aes(x = hhid,fill=exposure_category, y = pm25_bam_ave)) +
   geom_bar(position="fill", stat="identity") + 
-  labs(y="Exposure category",x="") +
+  labs(y="Exposure category",x="Households") +
   scale_x_discrete(labels = NULL, breaks = NULL)
 g_categories_bars_exposure
 
@@ -517,11 +576,21 @@ map_by_filedeployment <- function(all_merged,pal) {
     addProviderTiles(providers$Esri.WorldImagery) %>% #Test this baby out.
     addCircles(lng=all_merged$lon,
                lat=all_merged$lat,
-               popup=paste(all_merged$local_time.x,', ',
-                           all_merged$hhid,', ',all_merged$sampletype,', ', all_merged$pm25_bam_ave),
+               popup=paste(all_merged$local_time,', ',
+                           all_merged$hhid,', ',
+                           round(all_merged$d_meters,1),'m from home, ', 
+                           round(all_merged$pm25_bam_ave,1),'µg/m^3'),
                fillColor = pal(all_merged$pm25_bam_ave),
                # radius =  (all_merged$pm25_bam_ave+10)/10,
                color = pal(all_merged$pm25_bam_ave)
+    ) %>% 
+    addCircles(lng=median(all_merged$lon,na.rm = T),
+               lat=median(all_merged$lat,na.rm = T),
+               popup=paste("Home/mode: ",all_merged$local_time,', ',
+                           all_merged$hhid,', ',all_merged$sampletype,', ', all_merged$pm25_bam_ave),
+               fillColor = "black",
+               # radius =  (all_merged$pm25_bam_ave+10)/10,
+               color = "black"
     )
   saveWidget(gg, plot_name, selfcontained = T)
   # }
@@ -628,14 +697,14 @@ g_boxplot <- ggplot(pa_ambient,aes(x=hhid, y = pm25_bam_ave)) +
   labs(y="Mean PM2.5 Concentration (ugm-3)",x="") +
   stat_summary(fun.y=mean, colour="blue", geom="point",
                shape=18, size=4.5,alpha = 0.85)+
-  stat_summary(fun.data = give.mean5, geom = "text",colour="blue") +
+  stat_summary(fun.data = give.mean10, geom = "text",colour="blue") +
   theme(axis.text.x=element_text(angle=45,hjust= 1 ,vjust = 1)) +
   theme(legend.title = element_blank())
 g_boxplot
 
 g_boxplot <- ggplot(pa_ambient,aes(x=local_time, y = pm25_bam_ave,color = hhid)) +
   geom_line(alpha = 0.5) +
-  facet_grid(.~region) +
+  facet_grid(region~.) +
   labs(y="PM2.5 Concentration (ugm-3)",x="") +
   # theme(axis.text.x=element_text(angle=45,hjust= 1 ,vjust = 1)) +
   theme(legend.title = element_blank())
@@ -653,6 +722,7 @@ g_boxplot
 modeldata <- summary_pa_deployment %>% 
   dplyr::filter(!hhid %like% "Ambient") %>%
   dplyr::left_join(odkend %>% 
+                     dplyr::filter(!`Surveyend-Surveyendnotes` %like% "Ghh") %>% 
                      dplyr::select(hhid,ends_with("yn"),contains("smoking"),
                                    contains("cook"),contains("lightingtype")),
                    by ="hhid") %>% 
@@ -660,7 +730,7 @@ modeldata <- summary_pa_deployment %>%
   dplyr::ungroup() %>% 
   dplyr::select(-sampletype,-N_gps_samples,-N_pa_samples,N_hours,-Min_pm25,
                 -Median_pm25,-Max_pm25,-SD_pm25,-Mode_lat,-Mode_lon) %>% 
-  dplyr::rename(insideoutsidecooking = `D_followupquestions2-D5_insideoutsidecooking`,
+  dplyr::rename(insidecooking = `D_followupquestions2-D5_insideoutsidecooking`,
                 tobacco_exp_freq = `D_followupquestions2-D7_cookinhaledtobaccofrequency`,
                 tobacco_freq = `D_followupquestions2-D6_cooksmokingfrequency`,
                 mosquitocoilyn = `I_mosquitocoil-I1_mosquitocoilyn`,
@@ -670,44 +740,53 @@ modeldata <- summary_pa_deployment %>%
                 gasetheleyn = `G_gasethele-G1_gasetheleyn`,
                 mosquitocoilyn = `I_mosquitocoil-I1_mosquitocoilyn`,
                 incensecoilyn = `M_incense-M1_incensecoilyn`) %>% 
-  dplyr::mutate(insideoutsidecooking = fct_recode(insideoutsidecooking, 
-                                                  "inside" = "0",
-                                                  "outside" = "1")) %>% 
-  dplyr::filter(!is.na(insideoutsidecooking))
+  dplyr::mutate(insidecooking = fct_recode(insidecooking, 
+                                           "inside" = "1",
+                                           "outside" = "0")) %>% 
+  dplyr::filter(!is.na(insidecooking)) %>% 
+  mutate_if(is.numeric, ~replace(., is.na(.), 0))
+
+
 
 
 
 #######Explore the yn data and model it.
-modeldata_yn <- modeldata %>%  dplyr::select(Mean_pm25,insideoutsidecooking ,tobacco_exp_freq,#tobacco_freq,
+# A regression model was applied between the 24-hr average exposures and the survey responses indicating whether people used different types of stoves, used mosquito coils, whether they cooked inside or outside, what fraction of the time they were at home (per GPS data), and how many times they were exposed to tobacco smoke during the sampling period.  The use of charcoal and mosquito coils significant predictors of increased exposure (14.7 µg/m3 and 30.1 µg/m3; p < 0.05), and the frequency of tobacco exposure is associated with a 2.9 µg/m3 increase per instance of exposure (p = 0.06).  Use of gas or electric cooking is a significant predictor of lower exposure vs. not using gas or electric cooking (p < 0.05)
+modeldata_yn <- modeldata %>%  dplyr::select(Mean_pm25,insidecooking ,tobacco_exp_freq,#tobacco_freq,
                                              mosquitocoilyn ,firewoodyn ,charcoalyn ,keroseneyn ,
-                                             gasetheleyn ,mosquitocoilyn, 
-                                             incensecoilyn,home_fraction) #D8_lightingtype
+                                             gasetheleyn ,mosquitocoilyn, region,
+                                             incensecoilyn,home_fraction,D8_lightingtype)
 
 scatterplots <- ggpairs(modeldata_yn)
 # print(scatterplots)
-
 # corrplots <- ggcorr(modeldata_yn)
 # print(corrplots)
 
 #Could add number of cooking events explicitly here, or hours of different activities.
 #Cooking event number would be to sum hours by hhid, by stove type, from the activity data.
-
-fit <- lm(Mean_pm25 ~ insideoutsidecooking +
-            tobacco_exp_freq + 
+fit <- lm(Mean_pm25 ~tobacco_exp_freq + 
+            insidecooking+
+            
             # tobacco_freq + 
-            mosquitocoilyn +
+            # region+
+            home_fraction+
+            gasetheleyn+
             firewoodyn +
-            charcoalyn +
+            charcoalyn+
             keroseneyn +
-            gasetheleyn +
-            mosquitocoilyn + 
-            incensecoilyn# +
+            mosquitocoilyn,
+          # Charcoal_stove+#D8_lightingtype
+          # Errands_home+
+          # Errands_out
+          # Kerosene_stove+LPG_stove+#Mosquito_coil+       Incense
+          # Wood_stove
+          # incensecoilyn# +
           # D8_lightingtype
           , 
-          data=modeldata_yn)
+          data=modeldata)
 
-plot(fit)
 summary(fit)
+plot(fit)
 crPlots(fit)
 durbinWatsonTest(fit) #Multi-collinear?
 vif(fit) # variance inflation factors 
@@ -715,23 +794,21 @@ sqrt(vif(fit)) > 2 # problem?
 ggPredict(fit)
 
 #perform forward stepwise regression on yn data
-fiticept <- lm(Mean_pm25 ~ 1, data=modeldata_yn)
+fiticept <- lm(Mean_pm25 ~ 1, data=modeldata)
 hotstepper <- step(fiticept, direction='both', scope=formula(modeldata_yn), trace=0)
-
 #view results of forward stepwise regression
 hotstepper$anova
-
 #view final model
 summary(hotstepper)
 
 
-
 ######## Explore the continuous data and model with it
-
-modeldata_continuous <- modeldata %>%  dplyr::select(Mean_pm25 ,tobacco_exp_freq,
-                                                     insideoutsidecooking,#tobacco_freq,
-                                                     tobacco_exp_freq,Charcoal_stove,Cooking,#D8_lightingtype
-                                                     Errands_home,Errands_out,Incense,Kerosene_stove,   LPG_stove,#Mosquito_coil,       
+# A regression was conducted for PM2.5 exposure against the time estimates of different activities as recorded in the surveys.  Lighting type, incense, region, and working periods, and use of mosquito coils were excluded from the model as they did not  improve the explanatory power of the model.  The only significant predictor of exposure found in the model at the 5% confidence level was exposure to tobacco (1 reported exposure to tobacco was associated with 3.8 µg/m3 increase in concentration).  Cooking inside was associated with slightly lower exposure, and use of charcoal and wood stoves were both associated with elevated exposures (1.4 and 0.9 µg/m3 increase in average exposure per hour of usage), but none of these relationships were statistically significant. 
+modeldata_continuous <- modeldata %>%  dplyr::select(Mean_pm25 ,tobacco_exp_freq,home_fraction,
+                                                     
+                                                     insidecooking,#tobacco_freq,
+                                                     tobacco_exp_freq,Charcoal_stove,Cooking,Mosquito_coil,#D8_lightingtype
+                                                     Errands_home,Errands_out,Incense,Kerosene_stove,  region, LPG_stove,#Mosquito_coil,       
                                                      Wood_stove,Working) %>% 
   # dplyr::mutate(Mean_pm25log = log(Mean_pm25)) %>% 
   replace(is.na(.), 0)
@@ -742,14 +819,16 @@ modeldata_continuous <- modeldata %>%  dplyr::select(Mean_pm25 ,tobacco_exp_freq
 # corrplots <- ggcorr(modeldata_continuous)
 # print(corrplots)
 
-fitcont <- lm(Mean_pm25 ~ insideoutsidecooking +
-                tobacco_exp_freq+Charcoal_stove+Cooking+#D8_lightingtype
-                Errands_home+Errands_out+Incense+Kerosene_stove+LPG_stove+#Mosquito_coil+       
-                Wood_stove+Working,
+fitcont <- lm(Mean_pm25 ~ insidecooking +
+                tobacco_exp_freq+Charcoal_stove+#D8_lightingtype
+                Errands_home+Errands_out+
+                home_fraction+
+                Kerosene_stove+LPG_stove+Mosquito_coil+       #Incense
+                Wood_stove,#+region # +Working,
               data=modeldata_continuous)
 
-plot(fitcont)
 summary(fitcont)
+plot(fitcont)
 
 fiticept_cont <- lm(Mean_pm25 ~ 1, data=modeldata_continuous)
 hotstepper_cont <- step(fiticept_cont, direction='both', scope=formula(modeldata_continuous), trace=0)
@@ -757,12 +836,13 @@ summary(hotstepper_cont)
 
 
 ###### Model by activity
-summary_by_activity
+# We ran a regression model between exposure to PM2.5 and activity information that was collected by surveys at the end of the sampling period.  These data associate the concentrations during the specific periods of time as recalled by the participants, with the activities they were engaged in during those times.  The intercept in this regression represents the activities categorized as time spent at home doing various activities (excluding cooking)  and the intercept concentration is 41.6µg/m3.  The use of wood, charcoal, and kerosene stoves were associated with significant and substantial increases in exposure relative to no cooking (91.1, 58.0, and 23.5µg/m3), while cooking with LPG was associated with only a 12.3 µg/m3 increase (p = 0.11).  The cooking category was from survey responses in which the participant reported cooking
 fit_activity <- lm(Mean_pm25 ~ activity_clean,
-                   data=summary_by_activity)
+                   data=summary_by_activity %>% dplyr::filter(sampletype == "personal"))
 summary(fit_activity)
 plot(fit_activity)
 
+# A linear regression model was performed to quantify the relationship between modes of transportation and the PM2.5 concentrations during those events.Transportation modes were checked against GPS data to ensure the speeds were physically reasonable, and times provided by the participants were adjusted per the GPS data, as needed.
 fit_transportation <- lm(Mean_pm25 ~ transportation,
                          data=summary_by_transport)
 summary(fit_transportation)
@@ -809,7 +889,9 @@ as.data.frame(all_merged) %>%
 
 #Write summary stats to an excel workbook
 list_of_datasets <- list("Deployment Summary" = summary_pa_deployment,
-                         "Overall Summary" = summary_overall)
+                         "Overall Summary" = summary_overall,
+                         "summary_by_activity" = summary_by_activity,
+                         "summary_by_transport" = summary_by_transport)
 openxlsx::write.xlsx(list_of_datasets, file = paste0("../results/Summary Statistics ",format(now(),"%d-%b-%y"),".xlsx"))
 
 

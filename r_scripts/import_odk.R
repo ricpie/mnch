@@ -77,7 +77,9 @@ odkend = read_csv("~/Dropbox/Jacaranda Kenya Field Folder/Data/ODK Data/MNCH_Ins
                 -ends_with("expected")) %>% 
   dplyr::mutate(across(c(ends_with("yn"),ends_with("frequency"),ends_with("cooking")), as.numeric),
                 across(c(ends_with("yn"),ends_with("cooking")),  ~ abs(.x - 2)),
-                across(c(ends_with("yn"),ends_with("cooking")), as.factor)) %>% 
+                across(c(ends_with("yn"),ends_with("cooking")), as.factor),
+                hhid = case_when(A0_fieldId == "203" & hhid == "DG103890"~ "DG103819",
+                                 TRUE ~ hhid)) %>% 
   dplyr::full_join(choices_odk %>% 
                      dplyr::filter(key == "lights") %>% 
                      rename(`D_followupquestions2-D8_lightingtype` = num),

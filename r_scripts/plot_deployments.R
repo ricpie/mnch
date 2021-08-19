@@ -10,8 +10,8 @@ plot_pa_with_gps <- function(pa_data_temp){
     #Raw both sensosrs pm 2.5 by site
     p1 = ggplot(pa_data_temp)+
       # geom_point(aes(x=local_time, y=pm2_5_cf_1_ave, color= "green"))+
-      geom_point(aes(x=local_time, y=pm25_larpa_ave, color= "blue"))+
-      scale_color_discrete(name = "Sensor", labels = c("Mean LARPA"))+#,"Mean Uncorrected"))+
+      geom_point(aes(x=local_time, y=pm25_bam_ave, color= "blue"))+
+      scale_color_discrete(name = "Sensor", labels = c("Mean bam"))+#,"Mean Uncorrected"))+
       labs(title = "PurpleAir")
     
     p3 = ggplot(pa_data_temp) +
@@ -40,9 +40,9 @@ plot_files <- function(pa_data_temp){
   if(!file.exists(plot_name)){
     #Raw both sensosrs pm 2.5 by site
     p1 = ggplot(pa_data_temp)+
-      geom_point(aes(x=local_time, y=pm25_larpa_ave, color= "blue"))+
+      geom_point(aes(x=local_time, y=pm25_bam_ave, color= "blue"))+
       geom_point(aes(x=local_time, y=pm2_5_cf_1_ave, color= "green"))+
-      scale_color_discrete(name = "Sensor", labels = c("Mean Uncorrected", "Mean LARPA"))+
+      scale_color_discrete(name = "Sensor", labels = c("Mean Uncorrected", "Mean bam"))+
       labs(title = "PurpleAir")+
       facet_wrap(.~instrument_id)
     
@@ -77,7 +77,7 @@ plot_pa_with_activities <- function(pa_data_temp,odkend_transport_processed_mm,o
     #Raw both sensosrs pm 2.5 by site
     p1 = ggplot(pa_data_temp)+
       # geom_point(aes(x=local_time, y=pm2_5_cf_1_ave, color= "green"))+
-      geom_point(aes(x=local_time, y=pm25_larpa_ave, color= "blue"))+
+      geom_point(aes(x=local_time, y=pm25_bam_ave, color= "blue"))+
       labs(title = "PurpleAir")+
       ylab("PM2.5")
     
@@ -378,7 +378,7 @@ give.n5 <- function(x){return(c(y = 5, label = length(x)))}
 
 give.mean <- function(x){return(c(y =mean(x)+.1, label = round(mean(x),digits=1)))}
 give.mean5 <- function(x){return(c(y =mean(x)+5, label = round(mean(x),digits=1)))}
-
+give.mean10 <- function(x){return(c(y =mean(x)+15, label = round(mean(x),digits=1)))}
 #To make box and whiskers quantiles rather than IQRs.
 f <- function(x) {
   r <- quantile(x, probs = c(0.05, 0.25, 0.5, 0.75, 0.95))
@@ -395,8 +395,8 @@ plot_by_filedeployment <- function(pa_data_temp,pa_ambient) {
       
       p1 = pa_data_temp %>% 
         ggplot() +
-        geom_point(aes(x=local_time, y=pm25_larpa_ave),alpha = .2) +
-        # geom_smooth(aes(x=local_time, y=pm25_larpa_ave),alpha = .2) +
+        geom_point(aes(x=local_time, y=pm25_bam_ave,color=as.factor(home_flag)),alpha = .2) +
+        # geom_smooth(aes(x=local_time, y=pm25_bam_ave),alpha = .2) +
         labs(title = paste0("PA for household: ",pa_data_temp$hhid[1]))+
         xlim(min(pa_data_temp$local_time),max(pa_data_temp$local_time))
       
@@ -404,10 +404,11 @@ plot_by_filedeployment <- function(pa_data_temp,pa_ambient) {
         dplyr::filter(local_time > min(pa_data_temp$local_time,na.rm = T),
                       local_time < max(pa_data_temp$local_time,na.rm = T)) %>%
         ggplot() +
-        geom_point(aes(x=local_time, y=pm25_larpa_ave),alpha = .2) +
+        geom_point(aes(x=local_time, y=pm25_bam_ave),alpha = .2) +
         # geom_line(aes(x=local_time, y=current_temp_f),alpha = .2) +
         labs(title = "Ambient")+
-        xlim(min(pa_data_temp$local_time),max(pa_data_temp$local_time))
+        xlim(min(pa_data_temp$local_time),max(pa_data_temp$local_time)) +
+        ylim(0,max(pa_data_temp$pm25_bam_ave))
       
       
       egg::ggarrange(p1, p2, heights = c(0.5,0.5))
@@ -419,3 +420,6 @@ plot_by_filedeployment <- function(pa_data_temp,pa_ambient) {
   }
   , finally={})
 }
+
+
+
